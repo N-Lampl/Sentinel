@@ -111,6 +111,7 @@ class CocoAdapter(DatasetAdapter):
         samples: List[Sample] = []
         findings: List[Finding] = []
         categories: Dict[Any, str] = {}
+        category_keypoints: Dict[Any, int] = {}
         per_split_categories: Dict[str, Dict[Any, str]] = {}
         stats: Dict[str, Any] = {"splits": {}}
         limit = self.max_samples()
@@ -133,6 +134,8 @@ class CocoAdapter(DatasetAdapter):
                     if cat["id"] in categories and categories[cat["id"]] != name:
                         findings.append(self._category_conflict(split_name, cat["id"], categories[cat["id"]], name))
                     categories.setdefault(cat["id"], name)
+                    if isinstance(cat.get("keypoints"), list) and cat["keypoints"]:
+                        category_keypoints.setdefault(cat["id"], len(cat["keypoints"]))
             per_split_categories[split_name] = split_categories
 
             images = data.get("images", []) or []
@@ -194,7 +197,7 @@ class CocoAdapter(DatasetAdapter):
                 cat_id = raw.get("category_id")
                 bbox, bbox_error = self._parse_bbox(raw.get("bbox"))
                 attributes: Dict[str, Any] = {}
-                for k in ("area", "iscrowd", "attributes", "score", "num_keypoints"):
+                for k in ("area", "iscrowd", "attributes", "score", "num_keypoints", "keypoints"):
                     if k in raw:
                         attributes[k] = raw[k]
                 if bbox_error:
@@ -244,6 +247,8 @@ class CocoAdapter(DatasetAdapter):
 
         if len(per_split_categories) > 1:
             findings.extend(self._category_set_differences(per_split_categories))
+        if category_keypoints:
+            source["category_keypoints"] = {str(k): v for k, v in category_keypoints.items()}
 
         dataset = Dataset(
             name=self.config.get("dataset.name") or self.root.name or "dataset",

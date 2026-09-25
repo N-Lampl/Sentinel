@@ -385,6 +385,12 @@ def cmd_plugins(_: argparse.Namespace) -> int:
     print("Reporters:")
     for name, _cls in reporters.items():
         print(f"  {name}")
+    from .embeddings.base import embeddings
+
+    print("Embedding providers (optional near-duplicate re-ranking):")
+    for name, cls in embeddings.items():
+        state = "available" if cls.available() else "missing optional dependency"
+        print(f"  {name:<14} {getattr(cls, 'description', '')}  [{state}]")
     return 0
 
 

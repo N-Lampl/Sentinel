@@ -27,6 +27,7 @@ Relative paths in the config are resolved against the config file's directory;
 | `groups.auto` | `true` | use well-known entity keys found in metadata |
 | `groups.keys` | `[]` | extra metadata keys that identify an entity / source / batch |
 | `groups.from_filename` | `{}` | `{group_name: regex}`; the named group `value` (or group 1) is the identifier |
+| `groups.resolver` | none | `"package.module:function"`; called with each `Sample`, returns `{group_name: value}` or `None` (custom logic, e.g. a lookup service) |
 | `lineage.keys` | `derived_from, parent, parent_id, parent_file, source_image, source_file, original, original_id, original_file, base_image` | metadata keys naming a parent sample |
 | `lineage.from_filename` | `[]` | regexes with a named group `parent` (matched on the file stem, then name) |
 | `time.keys` | `captured_at, timestamp, date_captured, datetime, capture_time, acquired_at, acquisition_time, time, date, created_at, recorded_at` | metadata keys holding a timestamp |
@@ -46,6 +47,10 @@ Values are severities: `error` (alias `forbid`, `fail`), `warning`, `info`
 | `near_duplicate.threshold` | `6` (Hamming bits of 64) |
 | `near_duplicate.min_correlation` | `0.8` (16x16 thumbnail correlation required to keep a candidate) |
 | `near_duplicate.max_group_findings` | `500` |
+| `near_duplicate.embedding.enabled` | `false`: re-rank hash candidates with embeddings (candidate pairs only, never all-pairs) |
+| `near_duplicate.embedding.provider` | `builtin` (numpy colour + structure descriptor); `torchvision` (ResNet-18, `pip install "dataset-sentinel[embeddings]"`, experimental); or a plugin |
+| `near_duplicate.embedding.threshold` | `10`: wider hash threshold used to generate candidates when enabled |
+| `near_duplicate.embedding.min_cosine` | `0.9`: candidates below this cosine similarity are dropped |
 | `derivative.cross_split` / `within_split` / `threshold` / `min_correlation` | `error` / `info` / `6` / `0.8` |
 | `derivative.crops` | `true` (2x2 tiles, halves, 50% and 75% centre crops) |
 | `derivative.crop_threshold` / `crop_min_correlation` | `12` / `0.9` (crop candidates use a wider hash threshold and stricter verification) |
@@ -60,6 +65,7 @@ Values are severities: `error` (alias `forbid`, `fail`), `warning`, `info`
 | `labels.min_bbox_size_px` | `1.0` |
 | `labels.unknown_category` / `duplicate_annotation_id` / `orphan_annotation` / `malformed_label` | `error` |
 | `labels.duplicate_annotation` / `invalid_segmentation` | `warning` |
+| `labels.invalid_keypoints` / `keypoints_out_of_bounds` | `error` / `warning` (COCO keypoints and YOLO pose: count, visibility flags, `num_keypoints`, bounds) |
 | `labels.category_mismatch` / `category_set_mismatch` | `error` / `warning` (COCO category lists that differ between split files) |
 | `labels.allowed_categories` | `null` (list of allowed class names) |
 | `distribution.imbalance` / `imbalance_ratio` | `warning` / `20` |
@@ -68,6 +74,8 @@ Values are severities: `error` (alias `forbid`, `fail`), `warning`, `info`
 | `distribution.missing_class_in_eval` | `warning` |
 | `distribution.image_size_shift` / `bbox_size_shift` / `cooccurrence` | `info` |
 | `distribution.min_samples` | `20` |
+| `distribution.rare_class` / `min_samples_per_class_per_split` | `warning` / `5` (classes present in a split with fewer images than this; 0 disables) |
+| `distribution.conditioned` / `conditioned_min_samples` | `info` / `30` (class mix per metadata group, e.g. camera or session, compared with the rest of its split) |
 | `consistency.conflicting_labels` / `duplicate_registration` | `error` |
 
 ## allowlist

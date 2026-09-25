@@ -44,13 +44,25 @@ candidates, and every candidate is verified with the normalised correlation of
 pairs form clusters.
 
 * Evidence: algorithm, threshold, closest cross-split pair (distance,
-  correlation), up to 20 pairs, cluster size.
+  correlation, cosine when embeddings are enabled), up to 20 pairs, cluster size.
 * Confidence: high_confidence when the best cross-split pair has distance <= 3
-  and correlation >= 0.9; heuristic otherwise (and always for clusters > 200).
+  and correlation >= 0.9 (or cosine >= 0.97 with correlation >= 0.9);
+  heuristic otherwise (and always for clusters > 200).
 * Policy: `policy.near_duplicate.cross_split` / `within_split` / `threshold` / `min_correlation`.
 * Limits: catches resizes, re-encodes, colour / brightness edits, light crops
   and small overlays. Does not catch heavy crops or semantic similarity
   (different photos of the same object).
+
+**Optional embedding re-ranking** (`policy.near_duplicate.embedding.enabled`):
+candidates are generated with a wider hash threshold (`embedding.threshold`,
+default 10) and kept only when the cosine similarity of their embeddings is at
+least `min_cosine` (default 0.9). Embeddings are computed for candidate samples
+only and cached (`embeddings.sqlite` next to the fingerprint cache). Providers:
+`builtin` (a numpy colour-grid + gradient-orientation descriptor: colour-aware,
+not a learned embedding), `torchvision` (ImageNet ResNet-18, optional extra,
+experimental), or a plugin registered under the `dataset_sentinel.embeddings`
+entry-point group. This is a heuristic that tightens or widens the hash stage;
+it is not semantic duplicate detection, and it defaults to off.
 
 ## derivative
 
@@ -88,7 +100,9 @@ enrichment from:
   `location`, `site`, `author`, `account`, `user_id`, `video_id`, `sequence_id`,
   `capture_id`, `scene`, `study_id`, `case_id`, `group_id`, ...);
 * file-name regexes in `dataset.groups.from_filename` (`{name: pattern}` with a
-  named group `value`).
+  named group `value`);
+* a Python resolver `dataset.groups.resolver: "package.module:function"` that
+  receives each `Sample` and returns `{group_name: value}`.
 
 Metadata itself comes from COCO image fields, VOC `<source>` fields, a manifest
 (`dataset.metadata.file` / `--manifest`: CSV, TSV, JSON, JSONL or Parquet joined
@@ -143,6 +157,7 @@ Deterministic structural checks (never count toward the rate):
 | `unknown_category`, `unknown_category_summary` | undeclared or disallowed categories (`allowed_categories`) | `unknown_category` |
 | `malformed_label` | unparsable YOLO line / COCO entry / VOC XML | `malformed_label` |
 | `invalid_segmentation`, `duplicate_annotation` | polygons / RLE, repeated identical annotations | same names |
+| `invalid_keypoints`, `keypoints_out_of_bounds` | COCO keypoints (`[x, y, v]` triplets, count vs the category's `keypoints` list, visibility in {0, 1, 2}, `num_keypoints`) and YOLO pose (`kpt_shape` from `data.yaml`, normalised range) | same names |
 
 Adapter-level structural findings (`adapter:coco`, `adapter:voc`): orphan
 annotations, duplicate annotation / image ids, duplicate image registrations,
@@ -166,6 +181,15 @@ Label and metadata distribution quality (never counts toward the rate):
   aspect ratio.
 * `cooccurrence_anomaly`: class pairs that co-occur in >= 50% of the training
   images containing either class but never together in an evaluation split.
+* `rare_class` (warning, deterministic): classes present in a split with
+  fewer than `min_samples_per_class_per_split` images (per-class metrics on
+  them are unstable).
+* `conditioned_class_mix` (info, heuristic): for every metadata group key
+  (camera, location, session, ... from `sample.groups`), group values whose
+  class distribution diverges from the rest of their split by more than
+  `shift_threshold` (JS divergence). A group that only ever shows one class is
+  a shortcut feature. The full per-split / per-key / per-value table is in
+  `detectors[].stats.conditioned_class_mix`.
 * `min_samples` guards all comparisons. Unknown categories (reported by
   `label_validity`) are excluded from the statistics.
 

@@ -93,6 +93,7 @@ class YoloAdapter(DatasetAdapter):
             base = p if p.is_absolute() else (self.root / p if (self.root / p).exists() else base / p)
 
         categories = self._parse_names(data.get("names"), data.get("nc"))
+        kpt_shape = self._parse_kpt_shape(data.get("kpt_shape"))
         splits_present = [k for k in ("train", "val", "test") if data.get(k)]
         extra = self.config.section("dataset.splits")
         for k in extra:
@@ -104,6 +105,8 @@ class YoloAdapter(DatasetAdapter):
         stats: Dict[str, Any] = {"splits": {}}
         limit = self.max_samples()
         source: Dict[str, Any] = {"format": "yolo", "root": str(self.root), "data": str(data_path), "base": str(base), "splits": {}}
+        if kpt_shape:
+            source["kpt_shape"] = list(kpt_shape)
 
         for split_name in splits_present:
             spec = extra.get(split_name, data.get(split_name))
@@ -128,7 +131,7 @@ class YoloAdapter(DatasetAdapter):
                     metadata={"label_file": str(label_path), "label_file_exists": label_path.exists()},
                 )
                 if label_path.exists():
-                    self._parse_label_file(sample, label_path, categories, findings)
+                    self._parse_label_file(sample, label_path, categories, findings, kpt_shape)
                 else:
                     missing_labels += 1
                 split_samples.append(sample)
@@ -203,7 +206,19 @@ class YoloAdapter(DatasetAdapter):
                 log.warning("YOLO split entry %s does not exist (resolved to %s)", entry, target)
         return images, resolved
 
-    def _parse_label_file(self, sample: Sample, label_path: Path, categories: Dict[Any, str], findings: List[Finding]) -> None:
+    @staticmethod
+    def _parse_kpt_shape(value: Any) -> Optional[Tuple[int, int]]:
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            try:
+                n, d = int(value[0]), int(value[1])
+            except (TypeError, ValueError):
+                return None
+            if n > 0 and d in (2, 3):
+                return n, d
+        return None
+
+    def _parse_label_file(self, sample: Sample, label_path: Path, categories: Dict[Any, str], findings: List[Finding],
+                          kpt_shape: Optional[Tuple[int, int]] = None) -> None:
         try:
             text = label_path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
@@ -227,14 +242,23 @@ class YoloAdapter(DatasetAdapter):
             if not attributes.get("malformed"):
                 if len(values) == 4:
                     bbox_norm = values
+                elif kpt_shape is not None and len(values) > 4:
+                    # pose dataset: cx cy w h then n keypoints of dimension d
+                    n, d = kpt_shape
+                    bbox_norm = values[:4]
+                    attributes["keypoints_norm"] = values[4:]
+                    attributes["keypoint_dim"] = d
+                    if len(values) - 4 != n * d:
+                        attributes["keypoints_error"] = f"expected {n * d} keypoint values ({n}x{d}), got {len(values) - 4}"
                 elif len(values) >= 6 and len(values) % 2 == 0:
                     xs, ys = values[0::2], values[1::2]
                     attributes["polygon_norm"] = values
                     bbox_norm = [(min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, max(xs) - min(xs), max(ys) - min(ys)]
                 elif len(values) > 5 and len(values) % 3 == 2:
-                    # keypoints: cx cy w h then (x y v)* -> box first
+                    # keypoints without kpt_shape: cx cy w h then (x y v)* -> box first
                     bbox_norm = values[:4]
                     attributes["keypoints_norm"] = values[4:]
+                    attributes["keypoint_dim"] = 3
                 else:
                     attributes["malformed"] = f"expected 4 box values or an even number (>=6) of polygon values, got {len(values)}"
                     attributes["raw"] = line[:200]

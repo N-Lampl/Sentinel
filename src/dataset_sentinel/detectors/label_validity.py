@@ -38,8 +38,11 @@ class LabelValidityDetector(Detector):
                 "missing_file", "unreadable_image", "empty_image", "blank_image", "size_mismatch",
                 "missing_annotations", "empty_split", "invalid_bbox", "out_of_bounds_bbox", "degenerate_bbox",
                 "unknown_category", "duplicate_annotation", "invalid_segmentation", "malformed_label", "missing_label_file",
+                "invalid_keypoints", "keypoints_out_of_bounds",
             )
         }
+        category_keypoints = {str(k): int(v) for k, v in (ctx.dataset.source.get("category_keypoints") or {}).items()}
+        kpt_shape = ctx.dataset.source.get("kpt_shape")
         min_px = float(cfg.get(_P + "min_bbox_size_px", 1.0) or 0)
         allowed = cfg.get(_P + "allowed_categories")
         allowed_set = {str(a) for a in allowed} if allowed else None
@@ -123,6 +126,7 @@ class LabelValidityDetector(Detector):
             seen_sig: Dict[str, List[str]] = defaultdict(list)
             for ann in s.annotations:
                 self._check_annotation(ann, s, width, height, min_px, categories, allowed_set, unknown_cats, emit)
+                self._check_keypoints(ann, s, width, height, category_keypoints, kpt_shape, emit)
                 seen_sig[ann.signature()].append(ann.id)
             dups = {sig: ids for sig, ids in seen_sig.items() if len(ids) > 1}
             if dups:
@@ -215,6 +219,64 @@ class LabelValidityDetector(Detector):
             if bad:
                 emit("invalid_segmentation", s, f"Invalid segmentation on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri}: {bad}.", "Fix the segmentation field.",
                      "Segmentations must be valid polygons or RLE.", {"annotation": ann.id, "problem": bad}, "invalid_segmentation")
+
+
+    @staticmethod
+    def _check_keypoints(ann: Annotation, s: Sample, width: Optional[int], height: Optional[int],
+                         category_keypoints: Dict[str, int], kpt_shape: Any, emit) -> None:
+        attrs = ann.attributes
+        desc = "Keypoint annotations must have the declared number of points, visibility flags in {0, 1, 2} and visible points inside the image."
+        if attrs.get("keypoints_error"):
+            emit("invalid_keypoints", s, f"Invalid keypoints on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri}: {attrs['keypoints_error']}.",
+                 "Fix the keypoint values (check kpt_shape in data.yaml).", desc, {"annotation": ann.id, "reason": attrs["keypoints_error"]}, "invalid_keypoints")
+            return
+        kps = attrs.get("keypoints")
+        if kps is not None:  # COCO: absolute [x, y, v] triplets
+            if not isinstance(kps, list) or len(kps) % 3 != 0 or any(not isinstance(v, (int, float)) for v in kps):
+                emit("invalid_keypoints", s, f"Invalid keypoints on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri} has a keypoints list that is not [x, y, v] triplets.",
+                     "Fix the keypoints list.", desc, {"annotation": ann.id}, "invalid_keypoints")
+                return
+            n = len(kps) // 3
+            expected = category_keypoints.get(str(ann.category_id))
+            if expected is not None and n != expected:
+                emit("invalid_keypoints", s, f"Wrong keypoint count on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri} has {n} keypoints but category {ann.category!r} declares {expected}.",
+                     "Pad missing keypoints with (0, 0, 0) or fix the category definition.", desc, {"annotation": ann.id, "count": n, "expected": expected}, "invalid_keypoints")
+            vis = kps[2::3]
+            if any(v not in (0, 1, 2) for v in vis):
+                emit("invalid_keypoints", s, f"Invalid keypoint visibility on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri} has visibility flags outside {{0, 1, 2}}.",
+                     "Use 0 (not labelled), 1 (labelled, hidden) or 2 (visible).", desc, {"annotation": ann.id, "flags": sorted({v for v in vis if v not in (0, 1, 2)})[:10]}, "invalid_keypoints")
+            declared = attrs.get("num_keypoints")
+            labelled = sum(1 for v in vis if v in (1, 2))
+            if isinstance(declared, (int, float)) and int(declared) != labelled:
+                emit("invalid_keypoints", s, f"num_keypoints mismatch on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri} declares num_keypoints={int(declared)} but {labelled} keypoints are labelled.",
+                     "Recompute num_keypoints from the visibility flags.", desc, {"annotation": ann.id, "declared": int(declared), "labelled": labelled}, "invalid_keypoints")
+            if width and height:
+                out = [(i, x, y) for i, (x, y, v) in enumerate(zip(kps[0::3], kps[1::3], vis)) if v in (1, 2) and not (-0.5 <= x <= width + 0.5 and -0.5 <= y <= height + 0.5)]
+                if out:
+                    emit("keypoints_out_of_bounds", s, f"Keypoints outside the image on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri} has {len(out)} labelled keypoints outside the {width}x{height} image.",
+                         "Clip or fix the coordinates, or mark the points as not labelled.", desc, {"annotation": ann.id, "points": out[:10]}, "keypoints_out_of_bounds")
+            return
+        norm = attrs.get("keypoints_norm")
+        if norm is not None:  # YOLO pose: normalised (x, y[, v]) tuples
+            d = int(attrs.get("keypoint_dim") or 3)
+            if len(norm) % d != 0:
+                emit("invalid_keypoints", s, f"Invalid keypoints on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri} has {len(norm)} keypoint values, not a multiple of {d}.",
+                     "Fix the label line.", desc, {"annotation": ann.id}, "invalid_keypoints")
+                return
+            n = len(norm) // d
+            if isinstance(kpt_shape, (list, tuple)) and len(kpt_shape) == 2 and n != int(kpt_shape[0]):
+                emit("invalid_keypoints", s, f"Wrong keypoint count on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri} has {n} keypoints but kpt_shape declares {int(kpt_shape[0])}.",
+                     "Fix the label line or kpt_shape.", desc, {"annotation": ann.id, "count": n, "expected": int(kpt_shape[0])}, "invalid_keypoints")
+            xs, ys = norm[0::d], norm[1::d]
+            vis = norm[2::d] if d == 3 else [2] * n
+            if d == 3 and any(v not in (0, 1, 2) for v in vis):
+                emit("invalid_keypoints", s, f"Invalid keypoint visibility on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri} has visibility flags outside {{0, 1, 2}}.",
+                     "Use 0, 1 or 2 for visibility.", desc, {"annotation": ann.id}, "invalid_keypoints")
+            tol = 1e-3
+            out = [i for i, (x, y, v) in enumerate(zip(xs, ys, vis)) if v in (1, 2) and not (-tol <= x <= 1 + tol and -tol <= y <= 1 + tol)]
+            if out:
+                emit("keypoints_out_of_bounds", s, f"Keypoints outside [0, 1] on {s.uri}", f"Annotation {ann.id} on {s.split}:{s.uri} has {len(out)} labelled keypoints outside the normalised range.",
+                     "Clip or fix the coordinates, or mark the points as not labelled.", desc, {"annotation": ann.id, "points": out[:10]}, "keypoints_out_of_bounds")
 
 
 def _segmentation_problem(seg: Any) -> Optional[str]:

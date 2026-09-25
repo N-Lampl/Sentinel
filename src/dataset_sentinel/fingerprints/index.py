@@ -56,11 +56,23 @@ class HammingIndex:
         return (codes >> np.uint64(start)) & mask
 
     def _build(self) -> None:
+        """Bucket indices by chunk value with one argsort per chunk (no Python
+        loop over every code), keeping only buckets with >= 2 members for
+        pairs_within and all buckets for query."""
         for start, width in self.bounds:
             vals = self._chunk_values(self.codes, start, width)
-            bucket: Dict[int, List[int]] = defaultdict(list)
-            for idx, v in enumerate(vals.tolist()):
-                bucket[v].append(idx)
+            if len(vals) == 0:
+                self._buckets.append({})
+                continue
+            order = np.argsort(vals, kind="stable")
+            sorted_vals = vals[order]
+            boundaries = np.flatnonzero(np.diff(sorted_vals)) + 1
+            starts = np.concatenate(([0], boundaries))
+            ends = np.concatenate((boundaries, [len(sorted_vals)]))
+            bucket: Dict[int, List[int]] = {}
+            uniq = sorted_vals[starts].tolist()
+            for v, a, b in zip(uniq, starts.tolist(), ends.tolist()):
+                bucket[v] = order[a:b].tolist()
             self._buckets.append(bucket)
 
     # ------------------------------------------------------------------ pairs

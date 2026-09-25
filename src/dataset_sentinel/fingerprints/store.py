@@ -10,7 +10,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -46,20 +46,40 @@ class _Cache:
         self._conn.commit()
 
     def get(self, path: Path, mode: str) -> Optional[dict]:
-        try:
-            st = path.stat()
-        except OSError:
-            return None
+        found = self.get_many([path], mode)
+        return found.get(path)
+
+    def get_many(self, paths: Sequence[Path], mode: str, chunk: int = 400) -> Dict[Path, dict]:
+        """Batched lookup: one query per ``chunk`` paths instead of one per file."""
         modes = ("exact",) if mode == "exact" else ("exact", "fast")
+        out: Dict[Path, dict] = {}
+        stats: Dict[str, Tuple[Path, int, int]] = {}
+        for p in paths:
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            stats[str(p)] = (p, st.st_size, st.st_mtime_ns)
+        keys = list(stats)
         with self._lock:
-            for m in modes:
-                row = self._conn.execute(
-                    "SELECT data FROM fingerprints WHERE path=? AND size=? AND mtime_ns=? AND version=? AND mode=?",
-                    (str(path), st.st_size, st.st_mtime_ns, self.VERSION, m),
-                ).fetchone()
-                if row:
-                    return json.loads(row[0])
-        return None
+            for start in range(0, len(keys), chunk):
+                part = keys[start : start + chunk]
+                placeholders = ",".join("?" * len(part))
+                rows = self._conn.execute(
+                    f"SELECT path, size, mtime_ns, mode, data FROM fingerprints WHERE version=? AND path IN ({placeholders})",
+                    (self.VERSION, *part),
+                ).fetchall()
+                best: Dict[str, Tuple[int, str]] = {}
+                for path, size, mtime_ns, m, data in rows:
+                    p, want_size, want_mtime = stats[path]
+                    if size != want_size or mtime_ns != want_mtime or m not in modes:
+                        continue
+                    rank = modes.index(m)
+                    if path not in best or rank < best[path][0]:
+                        best[path] = (rank, data)
+                for path, (_rank, data) in best.items():
+                    out[stats[path][0]] = json.loads(data)
+        return out
 
     def put_many(self, items: Iterable[Tuple[Path, dict]]) -> None:
         rows = []
@@ -108,17 +128,18 @@ class FingerprintStore:
             cache.prune_old_versions()
         todo: List[Sample] = []
         hits = 0
+        with_path = [s for s in samples if s.path is not None]
         for s in samples:
             if s.path is None:
                 self._fps[s.id] = ImageFingerprint(sample_id=s.id, path=s.uri, ok=False, error="no file path")
+        cached_all: Dict[Path, dict] = cache.get_many([s.path for s in with_path], self.mode) if cache is not None else {}  # type: ignore[misc]
+        for s in with_path:
+            cached = cached_all.get(s.path)  # type: ignore[arg-type]
+            if cached is not None:
+                cached["sample_id"] = s.id
+                self._fps[s.id] = ImageFingerprint.from_dict(cached)
+                hits += 1
                 continue
-            if cache is not None:
-                cached = cache.get(s.path, self.mode)
-                if cached is not None:
-                    cached["sample_id"] = s.id
-                    self._fps[s.id] = ImageFingerprint.from_dict(cached)
-                    hits += 1
-                    continue
             todo.append(s)
 
         done = hits

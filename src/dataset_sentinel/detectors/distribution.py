@@ -220,12 +220,106 @@ class DistributionDetector(Detector):
                     )
         res.stats["label_shift_js"] = shifts
 
+        # ------------------------------------------------------------- rare class / split combinations
+        self._rare_classes(ctx, res, ref, image_counts, all_classes)
+
         # ------------------------------------------------------------- image size / bbox size shift
         self._size_shift(ctx, res, ref, eval_splits, by_split, threshold, min_samples)
 
         # ------------------------------------------------------------- co-occurrence
         self._cooccurrence(ctx, res, ref, eval_splits, image_counts, by_split, min_samples)
+
+        # ------------------------------------------------------------- metadata-conditioned class mix
+        self._conditioned(ctx, res, by_split, class_counts, all_classes, threshold)
         return res
+
+    def _rare_classes(self, ctx: DetectorContext, res: DetectorResult, ref: Optional[str], image_counts: Dict[str, Counter], all_classes: List[str]) -> None:
+        cfg = ctx.config
+        sev = cfg.severity(_P + "rare_class")
+        minimum = int(cfg.get(_P + "min_samples_per_class_per_split", 0) or 0)
+        if sev is None or minimum <= 0 or not all_classes:
+            return
+        rare: Dict[str, Dict[str, int]] = {}
+        for split, ic in image_counts.items():
+            if sum(ic.values()) == 0:
+                continue
+            for c in all_classes:
+                n = ic.get(c, 0)
+                if 0 < n < minimum:
+                    rare.setdefault(split, {})[c] = n
+        for split, classes in rare.items():
+            listing = ", ".join(f"{c} ({n})" for c, n in sorted(classes.items(), key=lambda kv: kv[1])[:12])
+            res.add(
+                self.finding(
+                    kind="rare_class",
+                    title=f"{len(classes)} classes have fewer than {minimum} samples in {split}",
+                    severity=sev,
+                    confidence=Confidence.DETERMINISTIC,
+                    policy=cfg.policy_label(_P + "min_samples_per_class_per_split"),
+                    policy_description="Every class present in a split should have enough samples for its metric to be meaningful.",
+                    message=f"Classes with too few images in {split}: {listing}{' ...' if len(classes) > 12 else ''}. Per-class metrics on these will be unstable.",
+                    remediation="Collect more examples, merge rare classes, or exclude them from per-class evaluation.",
+                    evidence={"split": split, "minimum": minimum, "classes": classes},
+                    splits=[split],
+                )
+            )
+
+    def _conditioned(self, ctx: DetectorContext, res: DetectorResult, by_split: Dict[str, List[Sample]],
+                     class_counts: Dict[str, Counter], all_classes: List[str], threshold: float) -> None:
+        """Class mix per metadata group (camera, location, session, ...) within each split."""
+        cfg = ctx.config
+        sev = cfg.severity(_P + "conditioned")
+        min_n = int(cfg.get(_P + "conditioned_min_samples", 30) or 0)
+        if sev is None:
+            return
+        has_cats = bool(ctx.dataset.categories)
+        keys = sorted({k for s in ctx.dataset.samples for k in s.groups})
+        if not keys or not all_classes:
+            return
+        table: Dict[str, Dict[str, Dict[str, Dict[str, int]]]] = {}
+        divergent: List[Dict[str, Any]] = []
+        for split, members in by_split.items():
+            overall = np.array([class_counts[split].get(c, 0) for c in all_classes], dtype=float)
+            if overall.sum() < min_n:
+                continue
+            for key in keys:
+                per_value: Dict[str, Counter] = defaultdict(Counter)
+                for s in members:
+                    value = s.groups.get(key)
+                    if value is None:
+                        continue
+                    for a in s.annotations:
+                        if _countable(a, has_cats):
+                            per_value[value][_class_of(a)] += 1
+                if len(per_value) < 2:
+                    continue
+                for value, cc in per_value.items():
+                    total = sum(cc.values())
+                    if total < min_n:
+                        continue
+                    vec = np.array([cc.get(c, 0) for c in all_classes], dtype=float)
+                    d = js_divergence(overall - vec if (overall - vec).sum() > 0 else overall, vec)
+                    table.setdefault(split, {}).setdefault(key, {})[value] = {"annotations": total, "js_vs_rest": round(d, 4)}
+                    if d > threshold:
+                        top = sorted(cc.items(), key=lambda kv: -kv[1])[:5]
+                        divergent.append({"split": split, "key": key, "value": value, "annotations": total, "js_divergence": round(d, 4), "top_classes": dict(top)})
+        res.stats["conditioned_class_mix"] = table
+        if divergent:
+            divergent.sort(key=lambda x: -x["js_divergence"])
+            top = divergent[:8]
+            res.add(
+                self.finding(
+                    kind="conditioned_class_mix",
+                    title=f"{len(divergent)} metadata groups have a class mix that differs from the rest of their split",
+                    severity=sev,
+                    confidence=Confidence.HEURISTIC,
+                    policy=cfg.policy_label(_P + "conditioned"),
+                    policy_description="Class proportions should not depend strongly on a capture group (camera, location, session, ...); otherwise the model may learn the group instead of the class.",
+                    message="; ".join(f"{x['split']} {x['key']}={x['value']}: JS {x['js_divergence']:.2f} vs rest ({x['annotations']} annotations)" for x in top) + ".",
+                    remediation="Check whether the group is a shortcut feature (e.g. one camera only sees one class); balance classes across groups or stratify the split by group and class.",
+                    evidence={"groups": divergent[:50], "threshold": threshold},
+                )
+            )
 
     # ------------------------------------------------------------------ helpers
     @staticmethod

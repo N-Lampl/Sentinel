@@ -91,6 +91,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "auto": True,
             # {group_name: regex with a named group "value" applied to the file name}
             "from_filename": {},
+            # Python callable "package.module:function" receiving a Sample and
+            # returning {group_name: value} (or None); for custom logic
+            "resolver": None,
         },
         "lineage": {
             "keys": list(DEFAULT_LINEAGE_KEYS),
@@ -123,6 +126,16 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             # 16x16 grayscale thumbnails; below this value the pair is dropped.
             "min_correlation": 0.8,
             "max_group_findings": 500,
+            # Optional embedding re-ranking of hash candidates (never all-pairs).
+            # provider: builtin (numpy descriptor) | torchvision (extra) | plugin
+            "embedding": {
+                "enabled": False,
+                "provider": "builtin",
+                # wider hash threshold used to generate candidates when enabled
+                "threshold": 10,
+                # candidates below this cosine similarity are dropped
+                "min_cosine": 0.9,
+            },
         },
         "derivative": {
             "cross_split": "error",
@@ -168,6 +181,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "duplicate_annotation": "warning",
             "orphan_annotation": "error",
             "invalid_segmentation": "warning",
+            # keypoints: wrong count, bad visibility flag, visible point outside the image
+            "invalid_keypoints": "error",
+            "keypoints_out_of_bounds": "warning",
             "malformed_label": "error",
             "missing_label_file": "warning",
             # COCO: the same category id named differently in two split files
@@ -188,6 +204,15 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "bbox_size_shift": "info",
             "cooccurrence": "info",
             "min_samples": 20,
+            # warn when a class has fewer than this many annotated samples in a
+            # split where it is expected (0 disables)
+            "min_samples_per_class_per_split": 5,
+            "rare_class": "warning",
+            # class mix conditioned on metadata groups (camera, location,
+            # session, ...): a group value whose class distribution diverges from
+            # its split's overall distribution by more than shift_threshold
+            "conditioned": "info",
+            "conditioned_min_samples": 30,
         },
         "consistency": {
             "conflicting_labels": "error",
@@ -486,9 +511,12 @@ def config_template(fmt: str = "coco") -> str:
 
 policy:
   split_order: [train, val, test]
+  # severity per pair of split roles a leakage group spans (optional)
+  # split_pair_overrides: {"train/val": warning, "train/test": error, "val/test": error}
   exact_duplicate:   {cross_split: error, within_split: warning}
-  near_duplicate:    {cross_split: error, within_split: info, threshold: 6}
-  derivative:        {cross_split: error, within_split: info, threshold: 6}
+  near_duplicate:    {cross_split: error, within_split: info, threshold: 6, min_correlation: 0.8}
+  #   embedding: {enabled: false, provider: builtin, min_cosine: 0.9}   # optional re-ranking
+  derivative:        {cross_split: error, within_split: info, threshold: 6, crops: true}
   group_overlap:     {cross_split: error}
   lineage:           {cross_split: error}
   temporal:          {enabled: auto, cross_split: error, min_coverage: 0.5}
@@ -510,16 +538,31 @@ policy:
   consistency:
     conflicting_labels: error
 
+# Known, permitted findings: kept in the report as "suppressed", excluded from the rate.
+# allowlist:
+#   - id: 2cc9116ec30d
+#     reason: "duplicate kept on purpose"
+#     expires: 2027-01-01
+
+# Compare against an approved run (sentinel baseline create -o .sentinel/baseline.json)
+# baseline:
+#   file: .sentinel/baseline.json
+
 output:
   json: sentinel-report.json
   html: sentinel-report.html
+  # sarif: sentinel-report.sarif
+  # fix_plan: fix-plan.csv
   thumbnails: true
 
 fail_on:
   severity: error
   max_violation_rate: 0.0
+  detector_errors: true
+  new_only: false        # true: with a baseline, fail only on regressions
 
 performance:
+  mode: exact            # fast = reduced JPEG decode, no pixel-identity hash
   workers: 0
   cache: .sentinel-cache
 """

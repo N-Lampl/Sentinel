@@ -50,13 +50,13 @@ Reports: sentinel-report.json, sentinel-report.html
 | # | Problem | Detector | How | Confidence |
 |---|---------|----------|-----|------------|
 | 1 | Exact duplicates across splits | `exact_duplicate` | same file path, byte-identical files (SHA-256), pixel-identical decoded images (BLAKE2) | deterministic |
-| 2 | Near-duplicates across splits | `near_duplicate` | 64-bit difference hash within a Hamming threshold, every candidate verified by thumbnail correlation | high confidence / heuristic |
-| 3 | Entity, source or batch overlap | `group_overlap` | shared `patient_id`, `subject`, `source`, `session`, `device`, `camera`, `batch`, ... from metadata, manifests (CSV / JSON / Parquet) or file-name patterns | deterministic / high confidence |
+| 2 | Near-duplicates across splits | `near_duplicate` | 64-bit difference hash within a Hamming threshold, every candidate verified by thumbnail correlation; optional embedding re-ranking of candidates | high confidence / heuristic |
+| 3 | Entity, source or batch overlap | `group_overlap` | shared `patient_id`, `subject`, `source`, `session`, `device`, `camera`, `batch`, ... from metadata, manifests (CSV / JSON / Parquet), file-name patterns or a Python resolver | deterministic / high confidence |
 | 4 | Derivative samples: flips, rotations, transposes, 2x2 tiles, halves, centre crops | `derivative` | dHash of the 8 dihedral transforms and of regular sub-regions, verified by thumbnail correlation | high confidence / heuristic |
 | 4 | Derivative samples via lineage (arbitrary crops, augmentations, exports) | `lineage` | `derived_from` / `parent` metadata or file-name patterns | deterministic / heuristic |
 | 5 | Time leakage | `temporal` | overlapping capture-time ranges between splits that must be chronological | deterministic (when the policy is enabled) |
-| 6 | Invalid, missing, empty or out-of-policy labels | `label_validity` | missing / unreadable / blank images, degenerate or out-of-bounds boxes, unknown categories, malformed YOLO lines, invalid polygons, duplicate annotations, category lists that differ between COCO split files | deterministic |
-| 7 | Imbalance and distribution shift | `distribution` | class imbalance ratio, Jensen-Shannon divergence of class distributions, Wasserstein distance of image size / aspect / box size / objects per image, classes unseen in training, co-occurrence anomalies | deterministic / heuristic |
+| 6 | Invalid, missing, empty or out-of-policy labels | `label_validity` | missing / unreadable / blank images, degenerate or out-of-bounds boxes, unknown categories, malformed YOLO lines, invalid polygons, keypoint counts / visibility / bounds, duplicate annotations, category lists that differ between COCO split files | deterministic |
+| 7 | Imbalance and distribution shift | `distribution` | class imbalance ratio, rare class / split combinations, Jensen-Shannon divergence of class distributions, Wasserstein distance of image size / aspect / box size / objects per image, classes unseen in training, co-occurrence anomalies, class mix conditioned on camera / session / location metadata | deterministic / heuristic |
 | 8 | Inconsistent labels on related samples (review triage) | `consistency` | identical or near-identical images with different class sets or very different object counts | deterministic / heuristic |
 
 Every finding states the **violated policy**, the **evidence** used, a
@@ -74,7 +74,8 @@ pip install dataset-sentinel
 ```
 
 Requires Python 3.9+, numpy, Pillow and PyYAML. No cloud upload, no account.
-Parquet manifests need `pyarrow` (or pandas).
+Extras: `dataset-sentinel[parquet]` for Parquet manifests,
+`dataset-sentinel[embeddings]` for the optional torchvision re-ranking provider.
 
 ## Quick start
 
@@ -300,11 +301,13 @@ fingerprint cache, fast mode.
 
 Not implemented (and not claimed): video, tabular, text, audio, time-series and
 multimodal adapters; arbitrary (non-grid) crop detection by content (use lineage
-metadata or file-name patterns); embedding-based semantic similarity; a hosted
-reporting platform. Near-duplicate and transform detection use perceptual
+metadata or file-name patterns); semantic duplicate detection (the optional
+embedding re-ranking only filters hash candidates and is off by default); a
+hosted reporting platform. Near-duplicate and transform detection use perceptual
 hashes: low-texture or very simple graphics can produce heuristic matches, which
 is why every such finding carries its distance, its correlation and a confidence
-class, and why the strict rate exists. See [docs/roadmap.md](docs/roadmap.md).
+class, and why the strict rate exists. See [docs/roadmap.md](docs/roadmap.md)
+and [docs/performance.md](docs/performance.md).
 
 ## Development
 

@@ -249,6 +249,9 @@ def resolve_groups(dataset: Dataset, config: SentinelConfig) -> Dict[str, Any]:
         except re.error as exc:
             raise ValueError(f"dataset.groups.from_filename[{name}] is not a valid regex: {exc}") from exc
 
+    resolver = _load_resolver(config.get("dataset.groups.resolver"))
+    resolver_keys: set = set()
+
     counts: Dict[str, int] = {}
     for s in dataset.samples:
         for k in keys:
@@ -265,7 +268,42 @@ def resolve_groups(dataset: Dataset, config: SentinelConfig) -> Dict[str, Any]:
                     if value:
                         s.groups[gname] = str(value)
                         counts[gname] = counts.get(gname, 0) + 1
-    return {"keys": keys + list(patterns), "samples_with_group": counts}
+        if resolver is not None:
+            try:
+                extra = resolver(s)
+            except Exception as exc:
+                raise ValueError(f"dataset.groups.resolver failed for sample {s.id}: {type(exc).__name__}: {exc}") from exc
+            if extra:
+                if not isinstance(extra, dict):
+                    raise ValueError(f"dataset.groups.resolver must return a dict or None, got {type(extra).__name__}")
+                for gname, value in extra.items():
+                    if not _is_missing(value):
+                        s.groups[str(gname)] = str(value)
+                        counts[str(gname)] = counts.get(str(gname), 0) + 1
+                        resolver_keys.add(str(gname))
+    return {"keys": keys + list(patterns) + sorted(resolver_keys), "samples_with_group": counts}
+
+
+def _load_resolver(spec: Any):
+    """``"package.module:function"`` -> callable, or None."""
+    if not spec:
+        return None
+    if callable(spec):
+        return spec
+    text = str(spec)
+    if ":" not in text:
+        raise ValueError(f"dataset.groups.resolver must look like 'package.module:function', got {text!r}")
+    module_name, func_name = text.rsplit(":", 1)
+    import importlib
+
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as exc:
+        raise ValueError(f"dataset.groups.resolver: cannot import {module_name!r}: {exc}") from exc
+    func = getattr(module, func_name, None)
+    if not callable(func):
+        raise ValueError(f"dataset.groups.resolver: {text!r} is not a callable")
+    return func
 
 
 # --------------------------------------------------------------------------- lineage

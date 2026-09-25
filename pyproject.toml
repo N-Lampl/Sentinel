@@ -32,6 +32,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-cov", "ruff", "mypy", "build"]
+# optional embedding re-ranking with ImageNet ResNet-18 features (experimental)
+embeddings = ["torch>=2.0", "torchvision>=0.15"]
+# Parquet manifests
+parquet = ["pyarrow>=12"]
 
 [project.scripts]
 sentinel = "dataset_sentinel.cli:main"
@@ -53,6 +57,10 @@ temporal = "dataset_sentinel.detectors.temporal:TemporalDetector"
 label_validity = "dataset_sentinel.detectors.label_validity:LabelValidityDetector"
 distribution = "dataset_sentinel.detectors.distribution:DistributionDetector"
 consistency = "dataset_sentinel.detectors.consistency:ConsistencyDetector"
+
+[project.entry-points."dataset_sentinel.embeddings"]
+builtin = "dataset_sentinel.embeddings.builtin:BuiltinDescriptor"
+torchvision = "dataset_sentinel.embeddings.torchvision_provider:TorchvisionResNet18"
 
 [project.entry-points."dataset_sentinel.reporters"]
 json = "dataset_sentinel.reporters.json_reporter:JsonReporter"
