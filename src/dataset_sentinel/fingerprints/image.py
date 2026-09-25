@@ -117,7 +117,11 @@ def region_slices(size: int) -> Dict[str, Tuple[slice, slice]]:
     }
 
 
-_REGIONS_64 = region_slices(_THUMB)
+#: region hashes are taken from a 128x128 intermediate thumbnail: measured
+#: agreement with the crop's own hash is then <= 6 bits (max), versus up to
+#: 10-12 bits when regions are cut from the 64x64 thumbnail
+_REGION_BASE = 128
+_REGIONS_BASE = region_slices(_REGION_BASE)
 _REGIONS_16 = region_slices(_VERIFY)
 
 
@@ -197,8 +201,9 @@ def _thumb_hashes(thumb: np.ndarray) -> List[int]:
     return [_dhash_of_float_array(fn(thumb)) for fn in _NP_TRANSFORMS]
 
 
-def _region_hashes(thumb: np.ndarray) -> List[int]:
-    return [_dhash_of_float_array(thumb[_REGIONS_64[name]]) for name in REGION_NAMES]
+def _region_hashes(thumb_base: np.ndarray) -> List[int]:
+    """dHash of each regular sub-region of a ``_REGION_BASE`` square float thumbnail."""
+    return [_dhash_of_float_array(thumb_base[_REGIONS_BASE[name]]) for name in REGION_NAMES]
 
 
 def thumb_array(fp: "ImageFingerprint") -> Optional[np.ndarray]:
@@ -300,7 +305,8 @@ def fingerprint_image(path: Path | str, sample_id: str, *, fast: bool = False) -
             hashes = _thumb_hashes(thumb)
             fp.dhash = hashes[0]
             fp.dhash_dihedral = hashes
-            fp.dhash_regions = _region_hashes(thumb)
+            base = np.asarray(gray.resize((_REGION_BASE, _REGION_BASE), Image.Resampling.BOX), dtype=np.float32)
+            fp.dhash_regions = _region_hashes(base)
             small = Image.fromarray(thumb, mode="F").resize((_VERIFY, _VERIFY), Image.Resampling.BOX)
             fp.thumb16 = np.clip(np.rint(np.asarray(small, dtype=np.float32)), 0, 255).astype(np.uint8).tobytes()
             fp.ok = True

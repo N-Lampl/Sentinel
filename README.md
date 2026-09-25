@@ -279,10 +279,11 @@ HtmlReporter(config).write(report, "report.html")
 
 Fingerprinting is multi-threaded and cached (`--cache DIR`, keyed by path, size
 and mtime), so re-scans only touch changed files. Near-duplicate and derivative
-search use multi-index hashing, not all-pairs comparison. On a laptop, 5,000
-small images scan in about 20 s cold and 3 s from cache. For large photos use
-`--fast` (reduced-resolution JPEG decoding, no pixel-identity hash): 3-5x
-faster; byte-identical and perceptual detection are unaffected.
+search use multi-index hashing, not all-pairs comparison. On a laptop, 30,000
+small images scan in about 130 s cold and 40 s from cache at under 500 MB of
+memory. For large photos use `--fast` (reduced-resolution JPEG decoding, no
+pixel-identity hash): 3-5x faster; byte-identical and perceptual detection are
+unaffected. Details and tuning in [docs/performance.md](docs/performance.md).
 
 ## Plugins
 

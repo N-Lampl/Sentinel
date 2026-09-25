@@ -31,7 +31,7 @@ class _Cache:
     superset of the data) but not the other way round.
     """
 
-    VERSION = 4
+    VERSION = 5
 
     def __init__(self, directory: Path):
         directory.mkdir(parents=True, exist_ok=True)

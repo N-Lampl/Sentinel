@@ -26,12 +26,15 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 
+import numpy as np
+
 from ..fingerprints.image import (
     DIHEDRAL_INVERSE,
     DIHEDRAL_NAMES,
     REGION_NAMES,
     normalized_correlation,
     region_correlation,
+    region_slices,
     thumb_array,
     transform_thumb,
 )
@@ -139,28 +142,53 @@ class DerivativeDetector(Detector):
         # therefore use a wider Hamming threshold and rely on the (stricter)
         # thumbnail correlation for verification and confidence.
         crop_candidates = 0
-        crop_threshold = int(ctx.config.get("policy.derivative.crop_threshold", 12))
+        crop_note = ""
+        crop_threshold = int(ctx.config.get("policy.derivative.crop_threshold", 8))
         crop_min_corr = float(ctx.config.get("policy.derivative.crop_min_correlation", 0.9) or 0)
+        crops_max = int(ctx.config.get("policy.derivative.crops_max_images", 0) or 0)
+        if detect_crops and crops_max and len(ids) > crops_max:
+            detect_crops = False
+            crop_note = f"crop/tile detection skipped: {len(ids)} images exceed policy.derivative.crops_max_images={crops_max}"
         if detect_crops:
-            crop_index = HammingIndex(identity, crop_threshold) if crop_threshold != threshold else index
+            # Only cross-split crops matter for leakage, so every split's region
+            # hashes are queried against an index of the OTHER splits only; flat
+            # regions (sky, walls) are skipped because their hashes collide with
+            # every low-texture image.
             region_ids, regions = store.region_arrays()
-            rpos = [pos.get(sid) for sid in region_ids]
-            for r, name in enumerate(REGION_NAMES):
-                for q_r, i, d in crop_index.query(regions[:, r]):
-                    q = rpos[q_r]
-                    if q is None or q == i:
+            rpos = np.array([pos.get(sid, -1) for sid in region_ids], dtype=np.int64)
+            valid = rpos >= 0
+            region_ids = [sid for sid, ok in zip(region_ids, valid) if ok]
+            regions = regions[valid]
+            rpos = rpos[valid]
+            flat = _flat_region_mask(store, region_ids)
+            split_of_idx = np.array([split_rank.get(ctx.dataset.get(sid).split, 99) for sid in ids])
+            split_of_region = split_of_idx[rpos]
+            for s_rank in np.unique(split_of_region):
+                others = np.flatnonzero(split_of_idx != s_rank)
+                mine = np.flatnonzero(split_of_region == s_rank)
+                if len(others) == 0 or len(mine) == 0:
+                    continue
+                crop_index = HammingIndex(identity[others], crop_threshold)
+                for r, name in enumerate(REGION_NAMES):
+                    query_rows = mine[~flat[mine, r]]
+                    if len(query_rows) == 0:
                         continue
-                    key = (min(q, i), max(q, i))
-                    if key in close or exact_key[q] == exact_key[i]:
-                        continue
-                    crop_candidates += 1
-                    tq, ti = thumb(q), thumb(i)
-                    corr = region_correlation(tq, ti, name) if tq is not None and ti is not None else 1.0
-                    if corr < crop_min_corr:
-                        rejected += 1
-                        continue
-                    # statement: ids[i] is region `name` of ids[q]  (directed: parent -> crop)
-                    consider(q, i, d, f"crop:{name}", corr, directed=True)
+                    for q_r, i_o, d in crop_index.query(regions[query_rows, r]):
+                        q = int(rpos[query_rows[q_r]])
+                        i = int(others[i_o])
+                        if q == i:
+                            continue
+                        key = (min(q, i), max(q, i))
+                        if key in close or exact_key[q] == exact_key[i]:
+                            continue
+                        crop_candidates += 1
+                        tq, ti = thumb(q), thumb(i)
+                        corr = region_correlation(tq, ti, name) if tq is not None and ti is not None else 1.0
+                        if corr < crop_min_corr:
+                            rejected += 1
+                            continue
+                        # statement: ids[i] is region `name` of ids[q]  (directed: parent -> crop)
+                        consider(q, i, d, f"crop:{name}", corr, directed=True)
 
         # Orient undirected (dihedral) statements from the earlier split (train) to
         # the later one, inverting the transform when the direction is swapped.
@@ -182,6 +210,8 @@ class DerivativeDetector(Detector):
             "min_correlation": min_corr,
             "rejected_by_verification": rejected,
             "crop_candidates": crop_candidates,
+            "crops": detect_crops,
+            **({"note": crop_note} if crop_note else {}),
             "pairs": len(best),
             "groups": 0,
             "cross_split_groups": 0,
@@ -271,6 +301,28 @@ class DerivativeDetector(Detector):
         res.findings.extend(cap.summaries(self, sev_for))
         res.stats = stats
         return res
+
+
+def _flat_region_mask(store: Any, region_ids: List[str], min_std: float = 2.0) -> np.ndarray:
+    """(n, len(REGION_NAMES)) boolean mask: True where the parent's 16x16
+    thumbnail region is (nearly) uniform, so its hash would collide with
+    every low-texture image."""
+    n = len(region_ids)
+    mask = np.zeros((n, len(REGION_NAMES)), dtype=bool)
+    if n == 0:
+        return mask
+    thumbs = np.zeros((n, 16, 16), dtype=np.float32)
+    for k, sid in enumerate(region_ids):
+        fp = store.get(sid)
+        t = thumb_array(fp) if fp else None
+        if t is not None:
+            thumbs[k] = t
+    slices = region_slices(16)
+    for r, name in enumerate(REGION_NAMES):
+        rows, cols = slices[name]
+        part = thumbs[:, rows, cols]
+        mask[:, r] = part.reshape(n, -1).std(axis=1) < min_std
+    return mask
 
 
 def _describe(transform: str) -> str:

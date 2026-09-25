@@ -144,10 +144,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "min_correlation": 0.8,
             # also look for regular tiles (2x2), halves and centre crops
             "crops": True,
-            # crop candidates use a wider hash threshold and a stricter
-            # thumbnail-correlation check
-            "crop_threshold": 12,
+            # crop candidates use a slightly wider hash threshold and a stricter
+            # thumbnail-correlation check; only cross-split crops are searched
+            "crop_threshold": 8,
             "crop_min_correlation": 0.9,
+            # skip the (comparatively expensive) crop search above this many
+            # images; the report says so. 0 = no limit
+            "crops_max_images": 100000,
         },
         "group_overlap": {"cross_split": "error"},
         "lineage": {"cross_split": "error"},

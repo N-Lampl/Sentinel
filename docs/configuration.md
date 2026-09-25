@@ -53,7 +53,8 @@ Values are severities: `error` (alias `forbid`, `fail`), `warning`, `info`
 | `near_duplicate.embedding.min_cosine` | `0.9`: candidates below this cosine similarity are dropped |
 | `derivative.cross_split` / `within_split` / `threshold` / `min_correlation` | `error` / `info` / `6` / `0.8` |
 | `derivative.crops` | `true` (2x2 tiles, halves, 50% and 75% centre crops) |
-| `derivative.crop_threshold` / `crop_min_correlation` | `12` / `0.9` (crop candidates use a wider hash threshold and stricter verification) |
+| `derivative.crop_threshold` / `crop_min_correlation` | `8` / `0.9` (crop candidates use a slightly wider hash threshold and stricter verification; only cross-split pairs are searched) |
+| `derivative.crops_max_images` | `100000`: skip the crop search above this many images and say so in the report (0 = no limit) |
 | `group_overlap.cross_split` | `error` |
 | `lineage.cross_split` | `error` |
 | `temporal.enabled` | `auto` (`true` = chronological splits required, `false` = skip) |

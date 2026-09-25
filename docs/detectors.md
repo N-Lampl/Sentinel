@@ -76,11 +76,15 @@ Two families of content-derived copies:
   later one ("test:x looks like flip horizontal of train:y").
 * **Regular tiles and crops** (`policy.derivative.crops`, default on): 2x2
   tiles, left / right / top / bottom halves, 50% and 75% centre crops. The
-  dHash of each region of the parent's thumbnail is indexed; a sample whose
-  identity hash matches a region hash (within `crop_threshold`, default 12)
-  is verified by correlating the parent's thumbnail region with the child's
-  thumbnail (`crop_min_correlation`, default 0.9). Statements are always
-  oriented parent -> crop.
+  dHash of each region is taken from a 128x128 intermediate thumbnail of the
+  parent (measured agreement with the crop's own hash: at most 6 bits). For
+  each split, the region hashes of its images are queried against an index
+  of the *other* splits' identity hashes (within `crop_threshold`, default 8);
+  flat regions are skipped; candidates are verified by correlating the
+  parent's thumbnail region with the child's thumbnail
+  (`crop_min_correlation`, default 0.9). Statements are always oriented
+  parent -> crop. Above `crops_max_images` (default 100,000) the crop search
+  is skipped and the detector's stats say so.
 
 * Evidence: transform names (`flip_horizontal`, `rotate_90`, `crop:tile_top_left`, ...), distances, correlations, pairs.
 * Confidence: high_confidence for transforms with distance <= 3 and correlation >= 0.9, for crops with correlation >= 0.95; heuristic otherwise.
