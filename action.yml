@@ -67,9 +67,9 @@ inputs:
     required: false
     default: "3.11"
   version:
-    description: "pip version specifier for dataset-sentinel (for example '==0.1.0'). Use 'local' to install the action's own checkout (self-test)."
+    description: "What to install: 'local' (default) installs the action's own checkout, so the scanner version matches the action ref; a pip specifier such as '==0.1.0' installs that release from PyPI."
     required: false
-    default: ""
+    default: "local"
   upload-artifact:
     description: "Upload the report directory as a workflow artifact."
     required: false
@@ -112,7 +112,7 @@ runs:
     - name: Install dataset-sentinel
       shell: bash
       run: |
-        if [ "${{ inputs.version }}" = "local" ]; then
+        if [ -z "${{ inputs.version }}" ] || [ "${{ inputs.version }}" = "local" ]; then
           python -m pip install --quiet "${{ github.action_path }}"
         else
           python -m pip install --quiet "dataset-sentinel${{ inputs.version }}"

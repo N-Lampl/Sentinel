@@ -77,10 +77,12 @@ class DatasetAdapter(ABC):
 
     @staticmethod
     def display_uri(path: Path, root: Path) -> str:
+        """Portable sample uri: relative to the root when possible, always with
+        forward slashes so finding ids and reports are identical on every OS."""
         try:
-            return str(path.relative_to(root))
+            return path.relative_to(root).as_posix()
         except ValueError:
-            return str(path)
+            return path.as_posix()
 
 
 def is_image_file(path: Path) -> bool:

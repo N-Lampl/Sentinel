@@ -493,7 +493,7 @@ def config_template(fmt: str = "coco") -> str:
       images: images/test
 """
     return (
-        "# Dataset Sentinel configuration (https://github.com/dataset-sentinel/dataset-sentinel)\n"
+        "# Dataset Sentinel configuration (https://github.com/N-Lampl/Sentinel)\n"
         "version: 1\n\n"
         + dataset_block
         + """

@@ -1,5 +1,8 @@
 # Dataset Sentinel
 
+[![CI](https://github.com/N-Lampl/Sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/N-Lampl/Sentinel/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **Validate ML dataset split integrity before you train.** Dataset Sentinel scans a
 dataset, finds samples that leak between train / validation / test splits, checks
 that labels are well-formed, and reports distribution problems that make metrics
@@ -70,12 +73,14 @@ allowlisted.
 ## Installation
 
 ```bash
-pip install dataset-sentinel
+pip install git+https://github.com/N-Lampl/Sentinel
 ```
 
 Requires Python 3.9+, numpy, Pillow and PyYAML. No cloud upload, no account.
-Extras: `dataset-sentinel[parquet]` for Parquet manifests,
-`dataset-sentinel[embeddings]` for the optional torchvision re-ranking provider.
+Once the package is published on PyPI, `pip install dataset-sentinel` will work
+too. Extras: `[parquet]` for Parquet manifests, `[embeddings]` for the optional
+torchvision re-ranking provider, e.g.
+`pip install "dataset-sentinel[parquet] @ git+https://github.com/N-Lampl/Sentinel"`.
 
 ## Quick start
 
@@ -243,7 +248,7 @@ toward the rate. Details in [docs/metric.md](docs/metric.md).
 ## GitHub Action
 
 ```yaml
-- uses: dataset-sentinel/dataset-sentinel@v0.1
+- uses: N-Lampl/Sentinel@main          # pin to a tag once releases exist
   with:
     path: data
     baseline: .sentinel/baseline.json   # optional: fail only on regressions
@@ -252,7 +257,8 @@ toward the rate. Details in [docs/metric.md](docs/metric.md).
     sarif: "true"
 ```
 
-The action installs the package, runs the scan, writes a job summary, emits
+The action installs the package from its own checkout (or a PyPI version via
+the `version` input), runs the scan, writes a job summary, emits
 workflow annotations for the top findings, uploads the report directory as an
 artifact and fails the job when the policy is violated. Outputs: `passed`,
 `violation-rate`, `errors`, `new-findings`, `json-report`, `html-report`,

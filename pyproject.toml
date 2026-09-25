@@ -71,8 +71,11 @@ sarif = "dataset_sentinel.reporters.sarif_reporter:SarifReporter"
 dvc = "dataset_sentinel.reporters.dvc_reporter:DvcReporter"
 
 [project.urls]
-Homepage = "https://github.com/dataset-sentinel/dataset-sentinel"
-Documentation = "https://github.com/dataset-sentinel/dataset-sentinel/tree/main/docs"
+Homepage = "https://github.com/N-Lampl/Sentinel"
+Repository = "https://github.com/N-Lampl/Sentinel"
+Documentation = "https://github.com/N-Lampl/Sentinel/tree/main/docs"
+Issues = "https://github.com/N-Lampl/Sentinel/issues"
+Changelog = "https://github.com/N-Lampl/Sentinel/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]

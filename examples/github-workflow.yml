@@ -37,7 +37,7 @@ jobs:
 
       - name: Dataset Sentinel
         id: sentinel
-        uses: dataset-sentinel/dataset-sentinel@v0.1
+        uses: N-Lampl/Sentinel@main          # pin to a tag once releases exist
         with:
           path: data
           config: sentinel.yaml                 # optional

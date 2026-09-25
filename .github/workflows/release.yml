@@ -1,0 +1,58 @@
+# Publishes to PyPI when a version tag is pushed (git tag v0.1.0 && git push --tags).
+#
+# One-time setup on PyPI (no API token needed): create the project
+# "dataset-sentinel", then under "Publishing" add a trusted publisher with
+#   owner: N-Lampl, repository: Sentinel, workflow: release.yml, environment: pypi
+# and create a GitHub environment named "pypi" in this repository's settings.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check that the tag matches the package version
+        run: |
+          pkg=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          tag="${GITHUB_REF_NAME#v}"
+          test "$pkg" = "$tag" || { echo "pyproject version $pkg != tag $tag"; exit 1; }
+      - name: Build
+        run: |
+          python -m pip install --quiet build twine
+          python -m build
+          twine check dist/*
+      - name: Smoke-test the wheel
+        run: |
+          python -m pip install --quiet dist/*.whl
+          sentinel --version && sentinel plugins
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write     # PyPI trusted publishing
+      contents: write     # GitHub release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

@@ -74,7 +74,7 @@ jobs:
           path: .sentinel-cache
           key: sentinel-${{ hashFiles('data/**') }}
           restore-keys: sentinel-
-      - uses: dataset-sentinel/dataset-sentinel@v0.1
+      - uses: N-Lampl/Sentinel@main       # pin to a tag once releases exist
         id: sentinel
         with:
           path: data
@@ -89,7 +89,9 @@ jobs:
           sarif_file: ${{ steps.sentinel.outputs.sarif-report }}
 ```
 
-What the action does: installs the package, runs the scan, appends the
+What the action does: installs the package from its own checkout (set the
+`version` input to a pip specifier such as `==0.1.0` once the package is on
+PyPI), runs the scan, appends the
 Markdown summary to the job summary, prints workflow annotations
 (`::error` / `::warning`, with file paths when the dataset lives in the
 repository), uploads the report directory as an artifact and fails the job

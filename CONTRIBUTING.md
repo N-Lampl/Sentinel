@@ -48,5 +48,17 @@ the model. See `docs/adapters.md` for the modality checklist.
 
 ## Releasing
 
-Bump `version` in `pyproject.toml` and `__version__` in
-`src/dataset_sentinel/__init__.py`, update `CHANGELOG.md`, tag `vX.Y.Z`.
+1. Bump `version` in `pyproject.toml` and `__version__` in
+   `src/dataset_sentinel/__init__.py`; move the `CHANGELOG.md` entry from
+   "unreleased" to the release date.
+2. Commit, then tag and push: `git tag v0.1.0 && git push origin main --tags`.
+3. `.github/workflows/release.yml` builds the sdist and wheel, checks that
+   the tag matches the package version, publishes to PyPI through trusted
+   publishing and creates a GitHub release with the artifacts.
+
+One-time PyPI setup (no API tokens): register the project name
+`dataset-sentinel`, add a *trusted publisher* (owner `N-Lampl`, repository
+`Sentinel`, workflow `release.yml`, environment `pypi`) and create a GitHub
+environment called `pypi` in the repository settings. After the first
+release, point the Action examples at the tag (`N-Lampl/Sentinel@v0.1.0`)
+instead of `@main`.

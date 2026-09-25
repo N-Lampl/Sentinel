@@ -53,7 +53,7 @@ class SarifReporter(Reporter):
                 "driver": {
                     "name": "dataset-sentinel",
                     "version": report.version,
-                    "informationUri": "https://github.com/dataset-sentinel/dataset-sentinel",
+                    "informationUri": "https://github.com/N-Lampl/Sentinel",
                     "rules": list(rules.values()),
                 }
             },

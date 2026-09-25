@@ -30,6 +30,24 @@ jobs:
       - name: Test
         run: pytest -q
 
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --quiet build twine
+          python -m build
+          twine check dist/*
+      - name: Install the wheel and run the demo
+        run: |
+          python -m pip install --quiet dist/*.whl
+          python examples/make_demo_dataset.py demo-dataset
+          sentinel scan demo-dataset --no-report -q || test $? -eq 1
+
   self-test-action:
     # Runs the composite action against a generated demo dataset with planted problems.
     runs-on: ubuntu-latest
