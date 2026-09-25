@@ -36,7 +36,7 @@ class LabelValidityDetector(Detector):
             k: cfg.severity(_P + k)
             for k in (
                 "missing_file", "unreadable_image", "empty_image", "blank_image", "size_mismatch",
-                "missing_annotations", "empty_split", "invalid_bbox", "out_of_bounds_bbox", "degenerate_bbox",
+                "missing_annotations", "no_valid_annotations", "empty_split", "invalid_bbox", "out_of_bounds_bbox", "degenerate_bbox",
                 "unknown_category", "duplicate_annotation", "invalid_segmentation", "malformed_label", "missing_label_file",
                 "invalid_keypoints", "keypoints_out_of_bounds",
             )
@@ -128,6 +128,11 @@ class LabelValidityDetector(Detector):
                 self._check_annotation(ann, s, width, height, min_px, categories, allowed_set, unknown_cats, emit)
                 self._check_keypoints(ann, s, width, height, category_keypoints, kpt_shape, emit)
                 seen_sig[ann.signature()].append(ann.id)
+            if s.annotations and all(a.attributes.get("malformed") for a in s.annotations):
+                emit("no_valid_annotations", s, f"No valid annotations after parsing: {s.uri}",
+                     f"{s.split}:{s.uri} has {len(s.annotations)} label line(s) and every one is malformed; the sample is effectively unlabeled.",
+                     "Fix the label file or remove the sample.", "A label file should contain at least one parsable annotation.",
+                     {"lines": len(s.annotations)}, "no_valid_annotations")
             dups = {sig: ids for sig, ids in seen_sig.items() if len(ids) > 1}
             if dups:
                 emit("duplicate_annotation", s, f"Duplicated annotations on {s.uri}",
@@ -138,11 +143,12 @@ class LabelValidityDetector(Detector):
         # ---------------------------------------------------------------- aggregates
         for split, members in no_annotations.items():
             total = sizes.get(split, 0)
-            emit("missing_annotations", None, f"{len(members)} of {total} samples in {split} have no annotations",
-                 f"{len(members)} samples in split {split} carry no labels: " + ", ".join(m.uri for m in members[:8]) + (" ..." if len(members) > 8 else ""),
+            rate = len(members) / total if total else 0.0
+            emit("missing_annotations", None, f"{len(members)} of {total} samples in {split} have no annotations ({rate:.0%})",
+                 f"{len(members)} samples ({rate:.1%}) in split {split} carry no labels: " + ", ".join(m.uri for m in members[:8]) + (" ..." if len(members) > 8 else ""),
                  "Confirm these are intentional background images; otherwise add the missing labels.",
                  "Samples are expected to carry at least one annotation unless they are deliberate negatives.",
-                 {"count": len(members), "split_total": total, "samples": [m.id for m in members[:100]]}, "missing_annotations", splits=[split])
+                 {"count": len(members), "split_total": total, "rate": round(rate, 4), "samples": [m.id for m in members[:100]]}, "missing_annotations", splits=[split])
             if sev.get("missing_annotations") is not None and res.findings:
                 res.findings[-1].samples = [m.ref() for m in members[:100]]
         for split, members in missing_labels.items():

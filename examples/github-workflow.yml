@@ -1,5 +1,9 @@
-# Example workflow: validate the dataset on every pull request that touches it.
-# Copy to .github/workflows/dataset-sentinel.yml in your repository.
+# Example workflow: validate the dataset on every pull request that touches it,
+# fail only on regressions relative to the approved baseline, and surface the
+# findings in code scanning. Copy to .github/workflows/dataset-sentinel.yml.
+#
+# Create / refresh the baseline locally and commit it:
+#   sentinel baseline create data -o .sentinel/baseline.json
 name: Dataset integrity
 
 on:
@@ -7,15 +11,22 @@ on:
     paths:
       - "data/**"
       - "sentinel.yaml"
+      - ".sentinel/baseline.json"
+  schedule:
+    - cron: "0 6 * * 1"          # weekly scan for changes that bypass pull requests
   workflow_dispatch:
 
 jobs:
   sentinel:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write         # PR comment
+      security-events: write       # SARIF upload
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true                      # if images are stored with Git LFS
+          lfs: true                # if images are stored with Git LFS
 
       - name: Restore fingerprint cache
         uses: actions/cache@v4
@@ -29,10 +40,19 @@ jobs:
         uses: dataset-sentinel/dataset-sentinel@v0.1
         with:
           path: data
-          config: sentinel.yaml          # optional
+          config: sentinel.yaml                 # optional
+          baseline: .sentinel/baseline.json     # optional: fail only on regressions
+          new-only: "true"
           fail-on: error
-          max-violation-rate: "0"
+          sarif: "true"
+          fix-plan: "true"
           args: "--set policy.near_duplicate.threshold=5"
+
+      - name: Upload findings to code scanning
+        if: always() && steps.sentinel.outputs.sarif-report != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.sentinel.outputs.sarif-report }}
 
       - name: Comment on the PR
         if: always() && github.event_name == 'pull_request'

@@ -152,7 +152,7 @@ Deterministic structural checks (never count toward the rate):
 |------|---------|------------|
 | `missing_file`, `unreadable_image`, `empty_image`, `blank_image` | file problems | same names |
 | `size_mismatch` | declared width/height differs from the file | `size_mismatch` |
-| `missing_annotations` (aggregated per split), `missing_label_file` (YOLO / VOC), `empty_split` | coverage | same names |
+| `missing_annotations` (aggregated per split, with the unlabeled rate), `no_valid_annotations` (label file whose every line is malformed), `missing_label_file` (YOLO / VOC), `empty_split` | coverage | same names |
 | `invalid_bbox`, `degenerate_bbox`, `out_of_bounds_bbox` | boxes (`min_bbox_size_px`); NaN / infinite values are `invalid_bbox` | same names |
 | `unknown_category`, `unknown_category_summary` | undeclared or disallowed categories (`allowed_categories`) | `unknown_category` |
 | `malformed_label` | unparsable YOLO line / COCO entry / VOC XML | `malformed_label` |
@@ -190,6 +190,11 @@ Label and metadata distribution quality (never counts toward the rate):
   `shift_threshold` (JS divergence). A group that only ever shows one class is
   a shortcut feature. The full per-split / per-key / per-value table is in
   `detectors[].stats.conditioned_class_mix`.
+* `truncated_boxes` (info, heuristic): class / split combinations where at
+  least half of the boxes touch the image border (tiling, cropping or framing
+  problems for that class).
+* `class_box_size_shift` (info, heuristic): classes whose median relative box
+  area in an evaluation split is at least 2x larger or smaller than in training.
 * `min_samples` guards all comparisons. Unknown categories (reported by
   `label_validity`) are excluded from the statistics.
 

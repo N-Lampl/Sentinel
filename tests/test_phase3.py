@@ -234,3 +234,52 @@ def test_json_report_has_new_fields(tmp_path):
     data = json.loads(JsonReporter().render(run_scan(b.root)))
     assert "clusters" in data and data["fix_plan_summary"]["samples_to_remove"] == 0
     assert all("new" in f and "suppressed" in f for f in data["findings"])
+
+
+# ----------------------------------------------------------------------------- manifests / label coverage / box geometry
+def test_yaml_manifest_and_dataset_level_samples_section(tmp_path):
+    b = CocoBuilder(tmp_path / "d", splits=("train", "test")).fill(2)
+    b.write()
+    train0 = b.images["train"][0]["file_name"]
+    test0 = b.images["test"][0]["file_name"]
+    (tmp_path / "meta.yaml").write_text(
+        f"dataset: demo\nsamples:\n  {train0}: {{site: S1}}\n  {test0}: {{site: S1}}\n"
+    )
+    report = run_scan(b.root, dataset__metadata__file=str(tmp_path / "meta.yaml"))
+    f = findings_of(report, "group_overlap", "group_overlap")
+    assert len(f) == 1 and f[0].evidence["group_key"] == "site"
+    (tmp_path / "list.yml").write_text(f"- file_name: {train0}\n  site: S2\n- file_name: {test0}\n  site: S2\n")
+    report = run_scan(b.root, dataset__metadata__file=str(tmp_path / "list.yml"))
+    assert findings_of(report, "group_overlap", "group_overlap")[0].evidence["group_value"] == "S2"
+
+
+def test_no_valid_annotations_and_unlabeled_rate(tmp_path):
+    b = YoloBuilder(tmp_path / "y", splits=("train",)).fill(3)
+    b.add("train", "allbad.jpg", labels=["x y z", "0 0.5 abc 0.3 0.4"])
+    b.add("train", "empty1.jpg", labels=[])
+    b.add("train", "empty2.jpg", labels=[])
+    b.write()
+    report = run_scan(b.root)
+    nva = findings_of(report, "label_validity", "no_valid_annotations")
+    assert len(nva) == 1 and "allbad.jpg" in nva[0].title and nva[0].severity is Severity.WARNING
+    ma = findings_of(report, "label_validity", "missing_annotations")
+    assert len(ma) == 1 and ma[0].evidence["count"] == 2 and ma[0].evidence["rate"] == pytest.approx(2 / 6, abs=1e-3)
+    assert "(33%)" in ma[0].title
+
+
+def test_truncated_boxes_and_class_box_size_shift(tmp_path):
+    b = CocoBuilder(tmp_path / "d", splits=("train", "test"), categories=("cat", "dog"))
+    for _ in range(25):
+        b.add("train", boxes=[(1, [40, 30, 40, 30]), (2, [50, 40, 20, 20])])
+    for _ in range(25):
+        # cats are large and cut off at the border in test; dogs unchanged
+        b.add("test", boxes=[(1, [0, 0, 150, 115]), (2, [50, 40, 20, 20])])
+    b.write()
+    report = run_scan(b.root)
+    trunc = findings_of(report, "distribution", "truncated_boxes")
+    assert len(trunc) == 1 and trunc[0].evidence["combinations"][0]["class"] == "cat" and trunc[0].evidence["combinations"][0]["split"] == "test"
+    size = findings_of(report, "distribution", "class_box_size_shift")
+    assert len(size) == 1 and size[0].evidence["classes"][0]["class"] == "cat" and size[0].evidence["classes"][0]["ratio"] > 2
+    assert all(f.confidence is Confidence.HEURISTIC and f.severity is Severity.INFO for f in trunc + size)
+    quiet = run_scan(b.root, policy__distribution__truncated_boxes="ignore", policy__distribution__class_box_size_shift="ignore")
+    assert not findings_of(quiet, "distribution", "truncated_boxes") and not findings_of(quiet, "distribution", "class_box_size_shift")

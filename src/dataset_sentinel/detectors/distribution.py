@@ -231,7 +231,93 @@ class DistributionDetector(Detector):
 
         # ------------------------------------------------------------- metadata-conditioned class mix
         self._conditioned(ctx, res, by_split, class_counts, all_classes, threshold)
+
+        # ------------------------------------------------------------- per-class box geometry
+        self._per_class_boxes(ctx, res, ref, eval_splits, by_split)
         return res
+
+    def _per_class_boxes(self, ctx: DetectorContext, res: DetectorResult, ref: Optional[str], eval_splits: List[str],
+                         by_split: Dict[str, List[Sample]]) -> None:
+        """Per class: boxes truncated at the image border, and box size that
+        differs systematically between the training split and another split."""
+        cfg = ctx.config
+        sev_trunc = cfg.severity(_P + "truncated_boxes")
+        sev_size = cfg.severity(_P + "class_box_size_shift")
+        min_boxes = int(cfg.get(_P + "min_boxes_per_class", 10) or 0)
+        if sev_trunc is None and sev_size is None:
+            return
+        has_cats = bool(ctx.dataset.categories)
+        rel_area: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+        touching: Dict[str, Dict[str, List[int]]] = defaultdict(lambda: defaultdict(list))
+        for split, members in by_split.items():
+            for s in members:
+                w, h = s.width, s.height
+                for a in s.annotations:
+                    if not _countable(a, has_cats):
+                        continue
+                    cls = _class_of(a)
+                    if a.bbox is not None and w and h and a.bbox.area > 0:
+                        b = a.bbox
+                        rel_area[split][cls].append(b.area / (w * h))
+                        touching[split][cls].append(int(b.x <= 1 or b.y <= 1 or b.x2 >= w - 1 or b.y2 >= h - 1))
+                    elif a.attributes.get("bbox_norm"):
+                        cx, cy, bw, bh = a.attributes["bbox_norm"]
+                        if bw > 0 and bh > 0:
+                            rel_area[split][cls].append(bw * bh)
+                            touching[split][cls].append(int(cx - bw / 2 <= 0.005 or cy - bh / 2 <= 0.005 or cx + bw / 2 >= 0.995 or cy + bh / 2 >= 0.995))
+        # truncated boxes
+        if sev_trunc is not None:
+            flagged = []
+            for split, per_class in touching.items():
+                for cls, flags in per_class.items():
+                    if len(flags) >= min_boxes:
+                        rate = sum(flags) / len(flags)
+                        if rate >= 0.5:
+                            flagged.append({"split": split, "class": cls, "boxes": len(flags), "truncated_rate": round(rate, 3)})
+            if flagged:
+                flagged.sort(key=lambda x: -x["truncated_rate"])
+                res.add(
+                    self.finding(
+                        kind="truncated_boxes",
+                        title=f"{len(flagged)} class/split combinations have most boxes cut off at the image border",
+                        severity=sev_trunc,
+                        confidence=Confidence.HEURISTIC,
+                        policy=cfg.policy_label(_P + "truncated_boxes"),
+                        policy_description="Boxes that systematically touch the image border suggest tiling, cropping or a framing problem for that class.",
+                        message="; ".join(f"{x['split']} {x['class']}: {x['truncated_rate']:.0%} of {x['boxes']} boxes" for x in flagged[:8]) + ".",
+                        remediation="Check the capture / tiling pipeline for these classes; truncated objects bias size and localisation metrics.",
+                        evidence={"combinations": flagged[:50]},
+                    )
+                )
+        # per-class size shift
+        if sev_size is not None and ref is not None:
+            shifted = []
+            for split in eval_splits:
+                for cls, areas in rel_area.get(split, {}).items():
+                    base = rel_area.get(ref, {}).get(cls, [])
+                    if len(areas) < min_boxes or len(base) < min_boxes:
+                        continue
+                    m_ref, m_eval = float(np.median(base)), float(np.median(areas))
+                    if m_ref <= 0:
+                        continue
+                    ratio = m_eval / m_ref
+                    if ratio >= 2.0 or ratio <= 0.5:
+                        shifted.append({"split": split, "class": cls, "median_relative_area_ref": round(m_ref, 5), "median_relative_area": round(m_eval, 5), "ratio": round(ratio, 3), "boxes": len(areas)})
+            if shifted:
+                shifted.sort(key=lambda x: -abs(math.log(x["ratio"])))
+                res.add(
+                    self.finding(
+                        kind="class_box_size_shift",
+                        title=f"{len(shifted)} classes have systematically different object sizes in evaluation splits",
+                        severity=sev_size,
+                        confidence=Confidence.HEURISTIC,
+                        policy=cfg.policy_label(_P + "class_box_size_shift"),
+                        policy_description="For each class, the typical object size should be similar across splits.",
+                        message="; ".join(f"{x['split']} {x['class']}: median relative box area {x['ratio']:.1f}x that of {ref}" for x in shifted[:8]) + ".",
+                        remediation="Verify annotation guidelines and camera distances are consistent, or stratify the split by object size.",
+                        evidence={"classes": shifted[:50], "reference": ref},
+                    )
+                )
 
     def _rare_classes(self, ctx: DetectorContext, res: DetectorResult, ref: Optional[str], image_counts: Dict[str, Counter], all_classes: List[str]) -> None:
         cfg = ctx.config

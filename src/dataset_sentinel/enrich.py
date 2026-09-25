@@ -150,11 +150,18 @@ def _load_sidecar(path: Path) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
     if suffix in {".parquet", ".pq"}:
         return _load_parquet(path)
-    if suffix in {".json", ".jsonl"}:
+    if suffix in {".json", ".jsonl", ".yaml", ".yml"}:
         text = path.read_text(encoding="utf-8")
         if suffix == ".jsonl":
             return [json.loads(line) for line in text.splitlines() if line.strip()]
-        data = json.loads(text)
+        if suffix in {".yaml", ".yml"}:
+            import yaml
+
+            data = yaml.safe_load(text)
+            if isinstance(data, dict) and isinstance(data.get("samples"), (list, dict)):
+                data = data["samples"]  # dataset-level YAML with a samples section
+        else:
+            data = json.loads(text)
         if isinstance(data, list):
             return [row for row in data if isinstance(row, dict)]
         if isinstance(data, dict):
@@ -165,7 +172,7 @@ def _load_sidecar(path: Path) -> List[Dict[str, Any]]:
                     row.setdefault("__key__", key)
                     rows.append(row)
             return rows
-        raise ValueError(f"{path}: unsupported JSON structure for metadata sidecar")
+        raise ValueError(f"{path}: unsupported structure for a metadata manifest (expected a list of records or a mapping keyed by sample)")
     # CSV / TSV
     delimiter = "\t" if suffix == ".tsv" else ","
     with path.open(newline="", encoding="utf-8-sig") as fh:

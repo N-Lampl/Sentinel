@@ -170,6 +170,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "blank_image": "warning",
             "size_mismatch": "warning",
             "missing_annotations": "warning",
+            # label file present but every line malformed
+            "no_valid_annotations": "warning",
             "empty_split": "error",
             "invalid_bbox": "error",
             "out_of_bounds_bbox": "error",
@@ -213,6 +215,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             # its split's overall distribution by more than shift_threshold
             "conditioned": "info",
             "conditioned_min_samples": 30,
+            # per class: boxes cut off at the image border, size shift vs training
+            "truncated_boxes": "info",
+            "class_box_size_shift": "info",
+            "min_boxes_per_class": 10,
         },
         "consistency": {
             "conflicting_labels": "error",

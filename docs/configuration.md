@@ -21,7 +21,7 @@ Relative paths in the config are resolved against the config file's directory;
 | `root` | `.` | dataset root |
 | `splits` | `{}` | COCO: `{split: {annotations: file, images: dir}}` or `{split: file}`; VOC: `{split: ImageSets/Main/x.txt}`; image-folder: `{split: dir}`; YOLO: optional overrides of `data.yaml` entries |
 | `data` | auto | YOLO `data.yaml` path |
-| `metadata.file` | none | CSV / TSV / JSON / JSONL / Parquet manifest with per-sample columns |
+| `metadata.file` | none | CSV / TSV / JSON / JSONL / YAML / Parquet manifest with per-sample columns (a YAML file may wrap the records in a `samples:` section) |
 | `metadata.key` | `file_name` | column that identifies the sample |
 | `metadata.match` | `name` | how to join: `name` (file name), `stem`, `path` (relative uri), `id` (native id) |
 | `groups.auto` | `true` | use well-known entity keys found in metadata |
@@ -60,7 +60,7 @@ Values are severities: `error` (alias `forbid`, `fail`), `warning`, `info`
 | `temporal.cross_split` | `error` |
 | `temporal.min_coverage` | `0.5` |
 | `labels.missing_file` / `unreadable_image` / `empty_image` | `error` |
-| `labels.blank_image` / `size_mismatch` / `missing_annotations` / `missing_label_file` | `warning` |
+| `labels.blank_image` / `size_mismatch` / `missing_annotations` / `no_valid_annotations` / `missing_label_file` | `warning` |
 | `labels.empty_split` / `invalid_bbox` / `out_of_bounds_bbox` / `degenerate_bbox` | `error` |
 | `labels.min_bbox_size_px` | `1.0` |
 | `labels.unknown_category` / `duplicate_annotation_id` / `orphan_annotation` / `malformed_label` | `error` |
@@ -76,6 +76,7 @@ Values are severities: `error` (alias `forbid`, `fail`), `warning`, `info`
 | `distribution.min_samples` | `20` |
 | `distribution.rare_class` / `min_samples_per_class_per_split` | `warning` / `5` (classes present in a split with fewer images than this; 0 disables) |
 | `distribution.conditioned` / `conditioned_min_samples` | `info` / `30` (class mix per metadata group, e.g. camera or session, compared with the rest of its split) |
+| `distribution.truncated_boxes` / `class_box_size_shift` / `min_boxes_per_class` | `info` / `info` / `10` (per class: boxes cut off at the image border; median object size differing >= 2x from training) |
 | `consistency.conflicting_labels` / `duplicate_registration` | `error` |
 
 ## allowlist
