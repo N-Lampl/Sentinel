@@ -171,3 +171,21 @@ def test_text_group_overlap_and_cli(tmp_path, capsys):
     assert "text_contamination" in out and "group_overlap" in out and "RESULT: FAIL" in out
     assert main(["init", "-f", "text", "-o", str(tmp_path / "s.yaml")]) == 0
     assert "format: text" in (tmp_path / "s.yaml").read_text()
+
+
+def test_shared_file_metadata_does_not_explode_lineage(tmp_path):
+    """Every record of a split shares the same file; that must not become 7000^2 lineage edges."""
+    root = tmp_path / "t"
+    root.mkdir()
+    _write_jsonl(root / "train.jsonl", [{"id": i, "text": f"record number {i} says something different {i * 3}", "source_file": "shared/train.jsonl"} for i in range(400)])
+    _write_jsonl(root / "test.jsonl", [{"id": "t", "text": "an evaluation record that is unique"}])
+    import time
+
+    t = time.time()
+    report = run_scan(root)
+    assert time.time() - t < 20
+    assert report.dataset["lineage_edges"] == 0
+    lin = report.stats["enrich"]["lineage"]
+    assert lin["unresolved"] + lin["ambiguous"] >= 1  # the shared file is not a parent sample
+    ds = report.dataset_ref
+    assert "_file" in ds.get("train:0").metadata and "source_file" in ds.get("train:0").metadata

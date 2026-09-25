@@ -187,7 +187,8 @@ class TextAdapter(DatasetAdapter):
                     native_id = str(native) if native not in (None, "") else f"{file.stem}:{index}"
                     sid = f"{split_name}:{native_id}"
                     uri = f"{self.display_uri(file, self.root)}:{index}"
-                    metadata: Dict[str, Any] = {"text": text, "n_chars": len(text), "source_file": str(file), "record": index}
+                    # underscore keys are internal: never picked up as group / lineage / time metadata
+                    metadata: Dict[str, Any] = {"text": text, "n_chars": len(text), "_file": str(file), "_record": index}
                     for k, v in rec.items():
                         if k in chosen_fields or k == chosen_id or k == chosen_label:
                             continue

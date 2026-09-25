@@ -330,7 +330,8 @@ def resolve_lineage(dataset: Dataset, config: SentinelConfig) -> Dict[str, Any]:
     for s in dataset.samples:
         p = Path(s.uri)
         by_name.setdefault(p.name, []).append(s)
-        by_stem.setdefault(p.stem, []).append(s)
+        if _file_like(p):
+            by_stem.setdefault(p.stem, []).append(s)
         by_uri[s.uri] = s
         by_native.setdefault(str(s.native_id), []).append(s)
 
@@ -339,11 +340,15 @@ def resolve_lineage(dataset: Dataset, config: SentinelConfig) -> Dict[str, Any]:
         if ref in by_uri:
             return [by_uri[ref]]
         p = Path(ref)
-        out = by_name.get(p.name) or by_stem.get(p.stem) or by_native.get(ref) or []
+        # a bare stem ("img_002") or a file-like name may match by stem; a
+        # record locator ("train.jsonl:12") may not
+        stem_ok = _file_like(p) or not p.suffix
+        out = by_name.get(p.name) or (by_stem.get(p.stem) if stem_ok else None) or by_native.get(ref) or []
         return out
 
     relationships: List[Relationship] = []
     unresolved = 0
+    ambiguous = 0
     from_meta = 0
     from_name = 0
     seen = set()
@@ -369,6 +374,11 @@ def resolve_lineage(dataset: Dataset, config: SentinelConfig) -> Dict[str, Any]:
             if not parents:
                 unresolved += 1
                 continue
+            if len(parents) > MAX_LINEAGE_PARENTS:
+                # a reference that matches many samples (a shared file name, a
+                # split name) is not a lineage relationship
+                ambiguous += 1
+                continue
             for parent in parents:
                 edge = (s.id, parent.id)
                 if edge in seen:
@@ -382,7 +392,20 @@ def resolve_lineage(dataset: Dataset, config: SentinelConfig) -> Dict[str, Any]:
                 else:
                     from_name += 1
     dataset.relationships.extend(relationships)
-    return {"edges": len(relationships), "from_metadata": from_meta, "from_filename": from_name, "unresolved": unresolved}
+    if ambiguous:
+        log.warning("lineage: %d references matched more than %d samples and were ignored (shared file names are not lineage)", ambiguous, MAX_LINEAGE_PARENTS)
+    return {"edges": len(relationships), "from_metadata": from_meta, "from_filename": from_name, "unresolved": unresolved, "ambiguous": ambiguous}
+
+
+#: a lineage reference resolving to more parents than this is treated as ambiguous
+MAX_LINEAGE_PARENTS = 5
+
+
+def _file_like(p: Path) -> bool:
+    """True for names with a short alphanumeric extension (``img_001.jpg``),
+    False for record locators such as ``train.jsonl:12``."""
+    suffix = p.suffix
+    return 1 < len(suffix) <= 6 and suffix[1:].isalnum()
 
 
 def enrich(dataset: Dataset, config: SentinelConfig) -> Dict[str, Any]:
