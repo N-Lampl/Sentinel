@@ -39,6 +39,11 @@ class MarkdownReporter(Reporter):
             lines += ["", "**Failure reasons**", ""] + [f"- {r}" for r in report.failure_reasons]
         for w in report.stats.get("config_warnings") or []:
             lines += ["", f"> ⚠️ config: {w}"]
+        if report.impact and report.impact.get("splits"):
+            from ..impact import format_impact_line
+
+            lines += ["", "**Metric impact of the flagged samples**", ""]
+            lines += [f"- {format_impact_line(split, entry)}" for split, entry in report.impact["splits"].items()]
         diff = report.stats.get("diff")
         if diff:
             lines += ["", "**Since baseline:** " + "; ".join(diff.get("headline", []))]

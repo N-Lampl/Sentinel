@@ -117,7 +117,27 @@ def main(root: Path) -> None:
     for split, content in data.items():
         content["categories"] = cats
         (root / "annotations" / f"instances_{split}.json").write_text(json.dumps(content))
-    print(f"wrote demo dataset to {root} ({sum(len(c['images']) for c in data.values())} images)")
+
+    # Demo predictions for the test split: the leaked copies are "memorised"
+    # (perfect boxes, high score), everything else is mediocre, so
+    #   sentinel scan demo-dataset --predictions test=demo-dataset/predictions/test.json
+    # shows the metric inflation caused by the leak.
+    leaked_names = {"dup_exact.jpg", "near_dup.jpg", "flip.jpg", "test_001.jpg"}  # test_001 shares patient P002
+    by_id = {img["id"]: img for img in data["test"]["images"]}
+    preds = []
+    for ann in data["test"]["annotations"]:
+        img = by_id.get(ann["image_id"])
+        if img is None:
+            continue
+        x, y, w, h = ann["bbox"]
+        if img["file_name"] in leaked_names:
+            preds.append({"image_id": img["id"], "category_id": ann["category_id"], "bbox": [x, y, w, h], "score": 0.97})
+        else:
+            # sloppy localisation: IoU ~0.55, counts at AP50 but not at stricter thresholds
+            preds.append({"image_id": img["id"], "category_id": ann["category_id"], "bbox": [x + 8, y + 6, w, h], "score": 0.6})
+    (root / "predictions").mkdir(exist_ok=True)
+    (root / "predictions" / "test.json").write_text(json.dumps(preds))
+    print(f"wrote demo dataset to {root} ({sum(len(c['images']) for c in data.values())} images) and predictions/test.json")
 
 
 if __name__ == "__main__":

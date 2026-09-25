@@ -92,6 +92,18 @@ class ConsoleReporter(Reporter):
             for name, row in m.by_detector.items():
                 out.append(s.dim(f"  {name:<18} {row['groups']:>5} groups  {row['violating_samples']:>6,} samples  ({row['violation_rate']:.2%})"))
 
+        if report.impact and report.impact.get("splits"):
+            from ..impact import format_impact_line
+
+            out.append("")
+            out.append(s.bold("Metric impact of the flagged samples:"))
+            for split, entry in report.impact["splits"].items():
+                line = format_impact_line(split, entry)
+                infl = entry.get("inflation")
+                out.append("  " + (s.red(line) if infl and infl > 0.005 else line))
+            for note in report.impact.get("notes", []):
+                out.append(s.dim(f"  note: {note}"))
+
         diff = report.stats.get("diff")
         if diff:
             out.append("")

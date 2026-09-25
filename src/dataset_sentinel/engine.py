@@ -191,6 +191,10 @@ def scan(config: SentinelConfig, progress: Optional[ProgressFn] = None) -> Repor
         dataset_ref=dataset,
     )
     report.fix_plan = build_fix_plan(report, dataset, config)
+    if config.section("evaluation.predictions"):
+        from .impact import compute_impact
+
+        report.impact = compute_impact(dataset, groups, config)
     if baseline is not None:
         report.stats["diff"] = build_diff(report, baseline)
     report.stats["duration_s"] = round(time.time() - t0, 3)

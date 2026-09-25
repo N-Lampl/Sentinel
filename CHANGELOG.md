@@ -13,6 +13,9 @@ First release. Computer-vision focus.
 - Multi-index Hamming search (exact recall for the configured threshold) and union-find grouping; every hash candidate verified by thumbnail correlation.
 - Detectors: `exact_duplicate`, `near_duplicate` (optional embedding re-ranking of hash candidates: provider interface, numpy `builtin` descriptor, experimental `torchvision` ResNet-18 extra, entry-point plugins), `derivative` (flips, rotations, transposes, tiles, crops), `group_overlap` (metadata, manifests, file-name patterns, Python resolver plugin), `lineage`, `temporal`, `label_validity` (incl. COCO keypoints and YOLO pose, unlabeled rate, label files without valid annotations), `distribution` (JS divergence, Wasserstein distances, unseen and rare classes, co-occurrence, metadata-conditioned class mix, per-class truncated boxes and size shift), `consistency` (review triage).
 
+### Metric impact
+- `--predictions SPLIT=PATH` / `evaluation.predictions`: scores an evaluation split with and without the flagged samples (COCO-style mAP@[.5:.95] / AP50 / AP75 with per-class deltas, or accuracy / macro-F1) from COCO results JSON, YOLO txt predictions or classification CSV; reported as `impact` in JSON, a tile and section in HTML, and lines in the console and Markdown summaries. Action input `predictions`.
+
 ### Policy and CI workflow
 - Split integrity violation rate with per-split, per-detector and per-confidence breakdowns plus a strict rate; cross-split clusters that unify all evidence per connected set of samples.
 - Baselines (`sentinel baseline create`), diffs (`sentinel diff`, `--baseline`, `fail_on.new_only`): findings marked new / known, changes since baseline (rate, severities, split sizes, classes, new cross-split groups).

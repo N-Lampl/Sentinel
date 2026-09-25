@@ -206,6 +206,7 @@ class HtmlReporter(Reporter):
             self._header(report),
             self._warnings(report),
             self._tiles(report),
+            self._impact(report),
             self._diff(report),
             self._clusters(report),
             self._fix_plan(report),
@@ -279,11 +280,67 @@ class HtmlReporter(Reporter):
         ]
         if base.get("applied"):
             tiles.insert(3, ("", "New since baseline", f"{base.get('new', 0):,}", f"{base.get('resolved', 0):,} resolved · {base.get('known', 0):,} known"))
+        if report.impact and report.impact.get("splits"):
+            split, e = next(iter(report.impact["splits"].items()))
+            infl = e.get("inflation")
+            if infl is not None:
+                tiles.insert(1, ("", f"{e['metric']} inflation ({split})", f"{infl:+.3f}", f"{e['all']:.3f} all vs {e['clean']:.3f} clean"))
         out = ["<div class=\"tiles\">"]
         for cls, label, value, sub in tiles:
             out.append(f"<div class=\"tile {cls}\"><div class=\"label\">{_e(label)}</div><div class=\"value\">{_e(value)}</div><div class=\"sub\">{_e(sub)}</div></div>")
         out.append("</div>")
         return "".join(out)
+
+    def _impact(self, report: Report) -> str:
+        impact = report.impact
+        if not impact or not impact.get("splits"):
+            return ""
+
+        def fmt(x: Any) -> str:
+            return "n/a" if x is None else f"{float(x):.3f}"
+
+        blocks = []
+        for split, e in impact["splits"].items():
+            metric = e["metric"]
+            infl = e.get("inflation")
+            cls = "up" if infl and infl > 0.005 else ""
+            rows = "".join(
+                f"<tr><td>{_e(label)}</td><td class=\"num\">{e['subsets'][key].get('samples', 0):,}</td><td class=\"num\">{fmt(e.get(val_key))}</td></tr>"
+                for label, key, val_key in (
+                    ("All evaluation samples", "all", "all"),
+                    ("Clean samples only (flagged removed)", "clean", "clean"),
+                    ("Flagged (leaked) samples only", "leaked", "leaked"),
+                    ("Clean, strict (deterministic + high-confidence flags only)", "strict_clean", "strict_clean"),
+                )
+            )
+            per_class = ""
+            if e.get("per_class_delta"):
+                per_class = (
+                    "<details class=\"section\"><summary>Per-class AP change (all vs clean)</summary><table><thead><tr><th>Class</th><th class=\"num\">All</th><th class=\"num\">Clean</th><th class=\"num\">Delta</th></tr></thead><tbody>"
+                    + "".join(f"<tr><td>{_e(d['class'])}</td><td class=\"num\">{d['all']:.3f}</td><td class=\"num\">{d['clean']:.3f}</td><td class=\"num {'up' if d['delta'] > 0 else ''}\">{d['delta']:+.3f}</td></tr>" for d in e["per_class_delta"])
+                    + "</tbody></table></details>"
+                )
+            headline = (
+                f"<p><b>{_e(split)}</b> ({_e(e['task'])}, {_e(metric)}): {fmt(e['all'])} on all samples, "
+                f"<b class=\"{cls}\">{fmt(e['clean'])}</b> once the {e['leaked_samples']:,} flagged samples are removed"
+                + (f" (inflation <b class=\"{cls}\">{infl:+.3f}</b>)" if infl is not None else "")
+                + f"; the flagged samples alone score {fmt(e['leaked'])}.</p>"
+            )
+            blocks.append(
+                headline
+                + f"<table><thead><tr><th>Subset</th><th class=\"num\">Samples</th><th class=\"num\">{_e(metric)}</th></tr></thead><tbody>{rows}</tbody></table>"
+                + per_class
+                + f"<p class=\"small muted\">Predictions: {_e(e['predictions_source'])}"
+                + (f" · {e['unmatched_predictions']} predictions did not match a sample" if e.get("unmatched_predictions") else "")
+                + "</p>"
+            )
+        notes = "".join(f"<li>{_e(n)}</li>" for n in impact.get("notes", []))
+        return (
+            "<h2>Metric impact of the flagged samples</h2><div class=\"card\">"
+            + "".join(blocks)
+            + (f"<ul class=\"plain small muted\">{notes}</ul>" if notes else "")
+            + "</div>"
+        )
 
     def _diff(self, report: Report) -> str:
         diff = report.stats.get("diff")

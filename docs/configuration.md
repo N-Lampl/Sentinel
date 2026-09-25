@@ -89,6 +89,19 @@ the violation rate. Entries can match by `id` (finding id), `group` (group id),
 sample of the finding must match). `expires: YYYY-MM-DD` retires an entry.
 Unused and expired entries are reported.
 
+## evaluation (metric impact)
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `evaluation.predictions` | `{}` | `{split: path}`: model predictions for an evaluation split (COCO results JSON, directory of YOLO `.txt` predictions, or classification CSV / JSON). CLI: `--predictions SPLIT=PATH` (repeatable) |
+| `evaluation.task` | `auto` | `detection` (mAP@[.5:.95], AP50, AP75, per-class AP) or `classification` (accuracy, macro-F1); `auto` picks from the predictions and annotations |
+
+The split is scored on all samples, on the clean samples (flagged leaked
+samples removed), on the flagged samples only, and on the strict-clean
+subset (deterministic and high-confidence flags only). The report's
+`impact` section holds the numbers; the difference between *all* and *clean*
+is the inflation caused by leakage.
+
 ## baseline, detectors, output, fail_on, performance
 
 | Key | Default | Meaning |
@@ -118,6 +131,7 @@ Unused and expired entries are reported.
 sentinel scan [PATH] [-c sentinel.yaml] [-f coco|yolo|voc|image-folder]
               [--split NAME=SPEC ...] [--data data.yaml]
               [--metadata|--manifest FILE] [--metadata-key COL] [--group-key|--group-by KEY ...]
+              [--predictions SPLIT=PATH ...]
               [--baseline FILE] [--new-only]
               [--json FILE] [--html FILE] [--markdown FILE] [--sarif FILE] [--dvc FILE] [--fix-plan FILE]
               [--report-dir DIR] [--no-report] [--github-annotations]

@@ -91,9 +91,9 @@ sentinel scan path/to/dataset
 # 2. open the report
 open sentinel-report.html          # JSON in sentinel-report.json
 
-# 3. try it on a demo dataset with planted problems
+# 3. try it on a demo dataset with planted problems (and demo predictions)
 python examples/make_demo_dataset.py demo-dataset
-sentinel scan demo-dataset --fix-plan plan.csv
+sentinel scan demo-dataset --fix-plan plan.csv --predictions test=demo-dataset/predictions/test.json
 ```
 
 Exit codes: `0` pass, `1` a fail condition was hit (by default any
@@ -123,6 +123,28 @@ the same way Ultralytics finds them (`images/` -> `labels/`, `.txt`).
 
 **Image folder**: one directory per split, optional class sub-directories
 (`train/cat/*.jpg`) for classification datasets.
+
+## How much does the leak inflate your metric?
+
+Give Sentinel your model's predictions for an evaluation split and it scores
+the split three times: on all samples, on the clean samples only, and on the
+flagged samples only.
+
+```bash
+sentinel scan data --predictions test=runs/val/predictions.json
+```
+
+```
+Metric impact of the flagged samples:
+  test mAP: all 0.712 -> clean 0.634 (+0.078); leaked-only 0.951 on 12 of 100 samples
+```
+
+Accepted inputs: COCO results JSON (`[{image_id, category_id, bbox, score}]`),
+a directory of YOLO `.txt` predictions (`yolo val save_txt=True save_conf=True`),
+or a CSV / JSON of classification predictions. Detection is scored with a
+COCO-style mAP@[.5:.95] (plus AP50 / AP75 and per-class deltas), classification
+with accuracy and macro-F1. No extra dependencies. The difference between
+*all* and *clean* is the number to put in front of whoever owns the dataset.
 
 ## Dataset CI: baselines, diffs and allowlists
 

@@ -59,6 +59,17 @@ Dataset: 100 samples (train 70, val 15, test 15).
 Violating samples = |{4} ∪ {3} ∪ {5}| = 4 + 3 + 5 - 1 = 11; rate = 11 / 100 = 11%.
 Strict rate = (4 + 5 - 1) / 100 = 8% (the heuristic near-duplicate cluster is excluded).
 
+## From a rate to a metric delta
+
+The rate says how much of the dataset is compromised; it does not say how
+much the evaluation score is inflated. With model predictions for the
+evaluation split (`--predictions test=preds.json`) Sentinel scores the split
+on all samples, on the clean samples only and on the flagged samples only
+(`impact` in the report). `all - clean` is the inflation attributable to the
+flagged samples; a flagged-only score far above the clean score confirms
+that the model memorised them. Both numbers are also given for the strict
+subset (deterministic and high-confidence flags only).
+
 ## Recommended gates
 
 * `fail_on.severity: error` and `fail_on.max_violation_rate: 0` (defaults): no

@@ -255,6 +255,14 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         # marked as not new
         "file": None,
     },
+    # Metric impact: score an evaluation split with and without the flagged
+    # (leaked) samples. predictions: {split: path} where path is a COCO results
+    # JSON, a directory of YOLO txt predictions, or a CSV/JSON of
+    # classification predictions. task: auto | detection | classification
+    "evaluation": {
+        "predictions": {},
+        "task": "auto",
+    },
     # Known, permitted findings. Each entry needs a reason and matches by
     # finding id, group id, kind, detector, or sample uri globs (all samples
     # of the finding must match). Optional "expires: YYYY-MM-DD".
@@ -325,6 +333,7 @@ FREE_FORM_PATHS = {
     "dataset.groups.from_filename",
     "dataset.source",
     "policy.split_pair_overrides",
+    "evaluation.predictions",
 }
 
 

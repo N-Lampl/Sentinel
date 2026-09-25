@@ -427,6 +427,8 @@ class Report:
     fix_plan: Optional[Dict[str, Any]] = None
     #: cross-split clusters: connected components over all violating groups
     clusters: List[Dict[str, Any]] = field(default_factory=list)
+    #: metric impact of the flagged samples (see ``impact.py``), when predictions were given
+    impact: Optional[Dict[str, Any]] = None
     #: in-memory dataset for reporters that need file paths (thumbnails); never serialised
     dataset_ref: Optional["Dataset"] = field(default=None, repr=False, compare=False)
 
@@ -443,6 +445,7 @@ class Report:
             "findings": [f.to_dict() for f in self.findings],
             "groups": [g.to_dict() for g in self.groups],
             "clusters": _jsonable(self.clusters),
+            "impact": _jsonable(self.impact),
             "stats": _jsonable(self.stats),
             "fix_plan_summary": _jsonable(self.fix_plan.get("summary")) if self.fix_plan else None,
             "config": _jsonable(self.config),

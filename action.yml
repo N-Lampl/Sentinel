@@ -34,6 +34,10 @@ inputs:
     description: "With a baseline: fail only on new findings and on a violation rate above the baseline's."
     required: false
     default: "false"
+  predictions:
+    description: "Model predictions to measure metric inflation, one 'split=path' per line (COCO results JSON, YOLO txt directory or classification CSV)."
+    required: false
+    default: ""
   args:
     description: "Extra arguments passed to 'sentinel scan' (for example '--set policy.near_duplicate.threshold=4 --disable distribution')."
     required: false
@@ -130,6 +134,7 @@ runs:
         SENTINEL_MAX_RATE: ${{ inputs.max-violation-rate }}
         SENTINEL_BASELINE: ${{ inputs.baseline }}
         SENTINEL_NEW_ONLY: ${{ inputs.new-only }}
+        SENTINEL_PREDICTIONS: ${{ inputs.predictions }}
         SENTINEL_ARGS: ${{ inputs.args }}
         SENTINEL_REPORT_DIR: ${{ inputs.report-dir }}
         SENTINEL_CACHE: ${{ inputs.cache-dir }}
@@ -151,6 +156,10 @@ runs:
         [ -n "$SENTINEL_FORMAT" ] && cmd+=(--format "$SENTINEL_FORMAT")
         [ -n "$SENTINEL_BASELINE" ] && cmd+=(--baseline "$SENTINEL_BASELINE")
         [ "$SENTINEL_NEW_ONLY" = "true" ] && cmd+=(--new-only)
+        while IFS= read -r line; do
+          line="${line#"${line%%[![:space:]]*}"}"
+          [ -n "$line" ] && cmd+=(--predictions "$line")
+        done <<< "$SENTINEL_PREDICTIONS"
         [ "$SENTINEL_ANNOTATIONS" = "true" ] && cmd+=(--github-annotations)
         [ "$SENTINEL_SARIF" = "true" ] && cmd+=(--sarif "$SENTINEL_REPORT_DIR/report.sarif")
         [ "$SENTINEL_FIX_PLAN" = "true" ] && cmd+=(--fix-plan "$SENTINEL_REPORT_DIR/fix-plan.json")

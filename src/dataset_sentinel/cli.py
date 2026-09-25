@@ -42,6 +42,9 @@ def _add_scan_arguments(scan: argparse.ArgumentParser, *, diff_mode: bool = Fals
     scan.add_argument("--metadata", "--manifest", dest="metadata", help="metadata manifest (CSV/TSV/JSON/JSONL/Parquet) with per-sample columns such as patient_id, source, captured_at")
     scan.add_argument("--metadata-key", help="manifest column that identifies the sample (default file_name)")
     scan.add_argument("--group-key", "--group-by", dest="group_key", action="append", default=[], help="metadata key that identifies an entity/source/batch (repeatable)")
+    scan.add_argument("--predictions", action="append", default=[], metavar="SPLIT=PATH",
+                      help="model predictions for an evaluation split (COCO results JSON, YOLO txt directory or classification CSV); "
+                           "the split is scored with and without the flagged samples. Repeatable.")
     if diff_mode:
         scan.add_argument("--baseline", required=True, help="JSON report of the approved previous run")
         scan.add_argument("--fail-on", choices=["new-error", "new-warning", "new-info", "error", "warning", "info", "none"], default="new-error",
@@ -169,6 +172,13 @@ def build_config_from_args(args: argparse.Namespace, mode: str = "scan") -> Sent
     if args.group_key:
         keys = list(config.get("dataset.groups.keys") or []) + args.group_key
         config.set("dataset.groups.keys", keys)
+    for item in getattr(args, "predictions", []) or []:
+        if "=" not in item:
+            raise SystemExit(f"--predictions expects SPLIT=PATH, got {item!r}")
+        split, value = item.split("=", 1)
+        preds = dict(config.section("evaluation.predictions"))
+        preds[split.strip()] = str(Path(value).expanduser())
+        config.set("evaluation.predictions", preds)
 
     # baseline / fail conditions
     if getattr(args, "baseline", None):
