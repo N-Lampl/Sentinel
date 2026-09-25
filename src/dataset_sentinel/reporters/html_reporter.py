@@ -123,6 +123,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .sample { width: 132px; font-size: 11px; color: var(--ink-2); overflow: hidden; }
 .sample img { display: block; width: 100%; height: 96px; object-fit: cover; border-radius: 6px; border: 1px solid var(--ring); background: var(--tag-bg); }
 .sample .ph { display: flex; align-items: center; justify-content: center; width: 100%; height: 96px; border-radius: 6px; border: 1px dashed var(--axis); color: var(--muted); }
+.sample.text { width: 280px; }
+.sample .snippet { font-size: 12px; line-height: 1.4; color: var(--ink); background: var(--tag-bg); border-radius: 6px; padding: 8px; height: 96px; overflow: hidden; }
 .sample .split { font-weight: 600; color: var(--ink); }
 .sample .uri { word-break: break-all; }
 .muted { color: var(--muted); }
@@ -527,10 +529,17 @@ class HtmlReporter(Reporter):
         samples_html = ""
         if f.samples:
             items = []
+            snippets = f.evidence.get("snippets") if isinstance(f.evidence.get("snippets"), dict) else {}
             for s in f.samples[:24]:
                 uri = thumbs.get(s.id)
-                img = f"<img src=\"{uri}\" alt=\"\" loading=\"lazy\">" if uri else "<div class=\"ph\">no preview</div>"
-                items.append(f"<div class=\"sample\">{img}<div class=\"split\">{_e(s.split)}</div><div class=\"uri\" title=\"{_e(s.uri)}\">{_e(s.uri)}</div></div>")
+                snip = snippets.get(s.id)
+                if snip:
+                    preview = f"<div class=\"snippet\">{_e(snip)}</div>"
+                    cls = "sample text"
+                else:
+                    preview = f"<img src=\"{uri}\" alt=\"\" loading=\"lazy\">" if uri else "<div class=\"ph\">no preview</div>"
+                    cls = "sample"
+                items.append(f"<div class=\"{cls}\">{preview}<div class=\"split\">{_e(s.split)}</div><div class=\"uri\" title=\"{_e(s.uri)}\">{_e(s.uri)}</div></div>")
             more = f"<div class=\"muted small\">+{len(f.samples) - 24} more samples (see JSON report)</div>" if len(f.samples) > 24 else ""
             samples_html = f"<div class=\"samples\">{''.join(items)}</div>{more}"
         evidence = json.dumps(f.evidence, indent=1, default=str)

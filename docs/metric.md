@@ -19,6 +19,11 @@ violation_rate  =  -------------------------------------------------------------
   count; `ignore` disables the detector.
 * A sample is counted **once** even when several detectors flag it or it sits
   in several groups.
+* Similarity-based groups (near-duplicates, transforms, text near-duplicates)
+  are connected components over **cross-split** relationships only.
+  Within-split similarity forms separate, informational groups, so a burst of
+  similar training frames or a templated benchmark cannot chain an entire
+  split into one leak group through a single cross-split pair.
 
 ## Breakdowns in the report
 

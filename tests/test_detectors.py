@@ -309,3 +309,28 @@ def test_detectors_can_be_disabled(coco_root):
     assert [d.name for d in report.detectors] == ["exact_duplicate"]
     report = run_scan(coco_root, detectors__disabled=["distribution", "temporal"])
     assert "distribution" not in {d.name for d in report.detectors}
+
+
+def test_scoped_components_keep_within_split_chains_out_of_leak_groups():
+    """A(train) ~ B(test) is a leak; A ~ A'(train) is within-split similarity and must not pull A' in."""
+    from dataset_sentinel.detectors.base import scoped_components
+
+    split_of = {0: "train", 1: "test", 2: "train", 3: "train", 4: "test", 5: "test"}.__getitem__
+    comps = scoped_components(6, [(0, 1), (0, 2), (2, 3), (4, 5)], split_of)
+    cross = [c for c, flag in comps if flag]
+    within = [c for c, flag in comps if not flag]
+    assert cross == [[0, 1]]
+    assert sorted(within) == [[0, 2, 3], [4, 5]]
+
+
+def test_cross_split_group_only_contains_cross_connected_samples(tmp_path):
+    """train A, test B ~ A: the leak group is exactly {A, B}; unrelated training images stay out."""
+    b = CocoBuilder(tmp_path / "d", splits=("train", "test")).fill(3)
+    a_img = Image.open(b.path("train", b.images["train"][0]["file_name"])).convert("RGB")
+    b.add("test", name="b.jpg", image=_shift(a_img, -5))
+    b.write()
+    report = run_scan(b.root)
+    cross = findings_of(report, "near_duplicate", "near_duplicate_cross_split")
+    assert len(cross) == 1
+    assert {s.uri.split("/")[-1] for s in cross[0].samples} == {b.images["train"][0]["file_name"], "b.jpg"}
+    assert report.metrics.by_detector["near_duplicate"]["violating_samples"] == 2

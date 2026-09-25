@@ -10,12 +10,14 @@ misleading. It runs locally, needs no account, and produces a JSON report, a
 self-contained HTML report, a CI-friendly exit code and, optionally, SARIF for
 GitHub code scanning, DVC metrics and a per-sample fix plan.
 
-The first release is focused on **computer vision**: image datasets in **COCO**,
-**YOLO (Ultralytics)**, **Pascal VOC** and plain image-folder layouts. The core
-is modality-agnostic and built around adapters, so video, tabular, text, audio,
-time-series and multimodal support can be added later without changing the
-detectors or the report (see [docs/adapters.md](docs/adapters.md) for the
-interface; those adapters are **not** part of this release).
+It covers **computer vision** datasets in **COCO**, **YOLO (Ultralytics)**,
+**Pascal VOC** and plain image-folder layouts, and **text** datasets for LLM
+training and evaluation (JSONL / CSV / Parquet records), including benchmark
+contamination checks. The core is modality-agnostic and built around
+adapters; video, tabular, audio, time-series and multimodal support can be
+added without changing the detectors or the report (see
+[docs/adapters.md](docs/adapters.md); those adapters are **not** part of this
+release).
 
 ```
 $ sentinel scan ./my-dataset
@@ -123,6 +125,32 @@ the same way Ultralytics finds them (`images/` -> `labels/`, `.txt`).
 
 **Image folder**: one directory per split, optional class sub-directories
 (`train/cat/*.jpg`) for classification datasets.
+
+**Text**: `train.jsonl`, `test.jsonl`, ... (or CSV / TSV / Parquet / txt, or a
+directory of shards per split); see [docs/text.md](docs/text.md).
+
+## Text: is your LLM eval contaminated?
+
+The same check for language-model data: a training / SFT corpus on the
+`train` side, a benchmark on the `test` side.
+
+```bash
+sentinel scan llm-data --text-field question --text-field choices --label-field answer
+```
+
+```
+  text_contamination  (3 error, 1 warning)
+    [ERROR] 1 evaluation item from test appear in train (containment 100%)  [deterministic; test,train]
+    [WARN ] test: 3 of 40 items (7.5%) appear in the training data  [deterministic; test]
+```
+
+JSONL / JSON / CSV / TSV / Parquet / txt records, auto-detected text fields
+(`text`, `prompt`, `question`, `messages`, ...). Detectors: word n-gram
+**containment** of evaluation items in training documents (the standard
+benchmark-contamination check), exact and near-duplicate texts (MinHash /
+LSH, Jaccard on word 2-gram shingles), label validity, plus the
+metadata-based checks. Same metric, clusters, fix plan, baselines and CI gates. Details and
+limits in [docs/text.md](docs/text.md).
 
 ## How much does the leak inflate your metric?
 
@@ -328,10 +356,11 @@ detectors above, baseline / diff / allowlist workflow, clusters and fix plans,
 JSON / HTML / Markdown / SARIF / DVC / console outputs, CLI, GitHub Action,
 fingerprint cache, fast mode.
 
-Not implemented (and not claimed): video, tabular, text, audio, time-series and
+Not implemented (and not claimed): video, tabular, audio, time-series and
 multimodal adapters; arbitrary (non-grid) crop detection by content (use lineage
-metadata or file-name patterns); semantic duplicate detection (the optional
-embedding re-ranking only filters hash candidates and is off by default); a
+metadata or file-name patterns); semantic duplicate or paraphrase detection
+(the optional embedding re-ranking only filters image hash candidates and is
+off by default; text matching is on normalised words, not model tokens); a
 hosted reporting platform. Near-duplicate and transform detection use perceptual
 hashes: low-texture or very simple graphics can produce heuristic matches, which
 is why every such finding carries its distance, its correlation and a confidence

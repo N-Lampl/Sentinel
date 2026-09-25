@@ -9,9 +9,9 @@ modality gets every applicable check for free.
 | Modality | Formats | Status |
 |----------|---------|--------|
 | image | COCO, YOLO / Ultralytics, Pascal VOC, image-folder | **implemented (v0.1)** |
+| text | JSONL / JSON / CSV / TSV / Parquet / txt records per split (LLM training, SFT and eval data); see `text.md` | **implemented (v0.1)**: contamination, exact / near duplicates, label validity, metadata checks |
 | video | frame / clip manifests, per-video annotation files | *planned, not implemented* |
 | tabular | CSV / Parquet with split column or split files | *planned, not implemented* |
-| text | JSONL / CSV corpora, HF-style datasets | *planned, not implemented* |
 | audio | manifests of audio files with transcripts / labels | *planned, not implemented* |
 | time series | windows over one or more series with timestamps | *planned, not implemented* |
 | multimodal | paired image + text, video + audio, ... | *planned, not implemented* |
@@ -90,7 +90,7 @@ Expected shapes per modality (design intent, not implemented):
 |----------|--------------|-----------------|--------------------|
 | video | hash of file; per-frame hashes | per-clip sequence of frame dHashes / a temporal hash | sub-clips, re-encodes, frame-rate changes, flips |
 | tabular | hash of canonicalised row | MinHash / SimHash over feature values | rows differing only in a derived column, scaled copies |
-| text | hash of normalised text | SimHash / MinHash of shingles, optional sentence embeddings | paraphrases (embedding similarity), truncations, case / whitespace changes |
+| text (implemented) | SHA-256 of normalised text | MinHash over word 2-gram shingles + LSH, word 8-gram containment | reformatting, light edits, items embedded in longer documents; paraphrases need embeddings (not implemented) |
 | audio | hash of decoded PCM | chromaprint-style landmark hash / spectrogram dHash | resamples, re-encodes, trims, gain changes |
 | time series | hash of the window values | SAX / piecewise-aggregate hash | overlapping windows (window leakage), resampled copies |
 | multimodal | per-component hashes | per-component codes | any component shared across splits |

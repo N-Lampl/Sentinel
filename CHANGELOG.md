@@ -13,6 +13,11 @@ First release. Computer-vision focus.
 - Multi-index Hamming search (exact recall for the configured threshold) and union-find grouping; every hash candidate verified by thumbnail correlation.
 - Detectors: `exact_duplicate`, `near_duplicate` (optional embedding re-ranking of hash candidates: provider interface, numpy `builtin` descriptor, experimental `torchvision` ResNet-18 extra, entry-point plugins), `derivative` (flips, rotations, transposes, tiles, crops), `group_overlap` (metadata, manifests, file-name patterns, Python resolver plugin), `lineage`, `temporal`, `label_validity` (incl. COCO keypoints and YOLO pose, unlabeled rate, label files without valid annotations), `distribution` (JS divergence, Wasserstein distances, unseen and rare classes, co-occurrence, metadata-conditioned class mix, per-class truncated boxes and size shift), `consistency` (review triage).
 
+### Text / LLM data
+- Text adapter (`format: text`): JSONL / JSON / CSV / TSV / Parquet / txt records per split (files or shard directories), auto-detected text / id / label fields, chat `messages` flattening, scalar fields as metadata.
+- Text fingerprints: normalised-text hash, word 2-gram MinHash (128 permutations) with LSH banding, word 8-gram containment.
+- Detectors: `text_contamination` (evaluation items contained in training records, with a per-split contamination rate), `text_exact_duplicate`, `text_near_duplicate`, `text_label_validity`; metadata detectors run unchanged. HTML report shows text snippets. `sentinel init -f text`, `--text-field`, `--label-field`, `--id-field`; `examples/make_text_demo.py`; `docs/text.md`.
+
 ### Metric impact
 - `--predictions SPLIT=PATH` / `evaluation.predictions`: scores an evaluation split with and without the flagged samples (COCO-style mAP@[.5:.95] / AP50 / AP75 with per-class deltas, or accuracy / macro-F1) from COCO results JSON, YOLO txt predictions or classification CSV; reported as `impact` in JSON, a tile and section in HTML, and lines in the console and Markdown summaries. Action input `predictions`.
 

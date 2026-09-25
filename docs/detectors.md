@@ -13,8 +13,10 @@ Confidence classes used below:
 * **inconclusive**: the check could not be evaluated (missing metadata) and says so.
 
 Only relationship groups from the leakage detectors (exact_duplicate,
-near_duplicate, derivative, group_overlap, lineage, temporal) count toward the
-split integrity violation rate. After all detectors ran, the engine applies
+near_duplicate, derivative, group_overlap, lineage, temporal and their text
+counterparts) count toward the split integrity violation rate. Similarity
+detectors build cross-split groups from cross-split pairs only; within-split
+similarity is reported as separate groups under the `within_split` policy. After all detectors ran, the engine applies
 `policy.split_pair_overrides`, the `allowlist`, marks findings as new / known
 against the baseline, and unifies all violating groups into **cross-split
 clusters** (see `metric.md`).
@@ -226,6 +228,25 @@ registrations (same image id / file name twice in a COCO file) use
 `policy.consistency.duplicate_registration`.
 
 ---
+
+## Text detectors
+
+Run for datasets with `format: text` (image detectors are skipped there, and
+vice versa). Full guide in `text.md`.
+
+* **text_contamination**: evaluation items (val / test) contained in
+  training records, measured as the fraction of the item's word 8-grams
+  present in the record (`policy.contamination`). Containment 1.0 is
+  deterministic, >= 0.8 high confidence, >= 0.5 heuristic. One
+  `contamination_rate` finding per evaluation split.
+* **text_exact_duplicate**: identical normalised text; reuses
+  `policy.exact_duplicate` and the `exact_duplicate_*` kinds.
+* **text_near_duplicate**: MinHash / LSH candidates over word 2-gram
+  shingles verified by exact Jaccard (`policy.text_near_duplicate.min_jaccard`,
+  default 0.7); reuses `policy.near_duplicate` severities and the
+  `near_duplicate_*` kinds.
+* **text_label_validity**: empty / very short texts, missing labels in a
+  labelled split, labels outside `allowed_categories`, duplicate ids.
 
 ## Writing a detector
 

@@ -107,6 +107,16 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             # common formats are parsed automatically
             "format": None,
         },
+        # text datasets (format: text)
+        "text": {
+            # record field(s) holding the text; concatenated. null = auto
+            # (text, content, prompt, question, input, instruction, messages, ...)
+            "fields": None,
+            "id_field": None,
+            "label_field": None,
+            "lowercase": True,
+            "strip_punctuation": True,
+        },
     },
     "policy": {
         # role order used by the temporal check: earlier roles must precede later ones
@@ -152,6 +162,24 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             # images; the report says so. 0 = no limit
             "crops_max_images": 100000,
         },
+        # text: near-duplicate parameters (severity comes from policy.near_duplicate)
+        "text_near_duplicate": {
+            # word 2-gram shingles: a one-word edit in a 13-17 word question keeps
+            # Jaccard 0.71-0.78 while templated sibling items (two differing
+            # slots in 16 words) score ~0.68; the threshold sits between them
+            "shingle": 2,
+            "num_perm": 128,
+            "bands": 32,
+            # >= 0.85 is high confidence
+            "min_jaccard": 0.7,
+        },
+        # text: evaluation items contained in training documents
+        "contamination": {
+            "cross_split": "error",
+            "ngram": 8,
+            "min_containment": 0.5,
+            "min_shared_ngrams": 2,
+        },
         "group_overlap": {"cross_split": "error"},
         "lineage": {"cross_split": "error"},
         "temporal": {
@@ -195,6 +223,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "category_mismatch": "error",
             # COCO: split files declaring different category sets
             "category_set_mismatch": "warning",
+            # text records
+            "empty_text": "error",
+            "short_text": "warning",
+            "min_tokens": 3,
         },
         "distribution": {
             "imbalance": "warning",
@@ -485,6 +517,21 @@ def config_template(fmt: str = "coco") -> str:
     val: val
     test: test
 """
+    elif fmt == "text":
+        dataset_block = """dataset:
+  name: my-llm-data
+  format: text
+  root: .
+  # training / SFT data on the train side, benchmark or eval items on the other;
+  # a split may be a file (jsonl, json, csv, tsv, parquet, txt) or a directory of files
+  splits:
+    train: data/train.jsonl
+    test: benchmarks/eval.jsonl
+  text:
+    fields: null          # e.g. [question, choices]; null = auto (text, prompt, question, messages, ...)
+    id_field: null
+    label_field: null     # e.g. answer
+"""
     else:
         dataset_block = """dataset:
   name: my-dataset
@@ -538,6 +585,9 @@ policy:
   group_overlap:     {cross_split: error}
   lineage:           {cross_split: error}
   temporal:          {enabled: auto, cross_split: error, min_coverage: 0.5}
+  # text datasets only
+  contamination:     {cross_split: error, ngram: 8, min_containment: 0.5}
+  text_near_duplicate: {min_jaccard: 0.8}
   labels:
     missing_file: error
     unreadable_image: error

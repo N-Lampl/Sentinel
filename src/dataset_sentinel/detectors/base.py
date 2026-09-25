@@ -87,6 +87,24 @@ class DetectorContext:
     def has_fingerprints(self) -> bool:
         return self._store is not None and self._store._computed
 
+    @property
+    def text_fingerprints(self):
+        """Text fingerprints (normalised text, shingles, MinHash), computed on first use."""
+        store = self.shared.get("_text_fingerprints")
+        if store is None:
+            from ..fingerprints.text import TextFingerprintStore
+
+            tcfg = self.config.section("dataset.text")
+            store = TextFingerprintStore(
+                self.dataset,
+                shingle_n=int(self.config.get("policy.text_near_duplicate.shingle", 2) or 2),
+                num_perm=int(self.config.get("policy.text_near_duplicate.num_perm", 128) or 128),
+                lowercase=bool(tcfg.get("lowercase", True)),
+                strip_punctuation=bool(tcfg.get("strip_punctuation", True)),
+            ).compute()
+            self.shared["_text_fingerprints"] = store
+        return store
+
     # ------------------------------------------------------------------ helpers
     def severity(self, dotted: str, default: Optional[Severity] = None) -> Optional[Severity]:
         return self.config.severity(dotted, default)
@@ -222,6 +240,24 @@ class FindingCap:
                 )
             )
         return out
+
+
+def scoped_components(n: int, pairs: Iterable[Tuple[int, int]], split_of: Any) -> List[Tuple[List[int], bool]]:
+    """Connected components over the *cross-split* edges (flag ``True``) and,
+    separately, over the *within-split* edges (flag ``False``).
+
+    Keeping the two scopes apart stops within-split similarity (video frames,
+    templated benchmark items) from chaining an entire split into one
+    cross-split leak group: a leak group is exactly the set of samples
+    connected through cross-split relationships.
+    """
+    from ..fingerprints.index import union_find_groups
+
+    cross = []
+    within = []
+    for a, b in pairs:
+        (cross if split_of(a) != split_of(b) else within).append((a, b))
+    return [(c, True) for c in union_find_groups(n, cross)] + [(c, False) for c in union_find_groups(n, within)]
 
 
 def group_id(detector: str, kind: str, member_ids: Sequence[str]) -> str:

@@ -146,7 +146,7 @@ class ConsoleReporter(Reporter):
             + (s.dim(f" ({suppressed} suppressed by allowlist)") if suppressed else "")
         )
         out.extend(self._grouped_findings(report.findings))
-        not_ok = [x for x in report.detectors if x.status != "ok"]
+        not_ok = [x for x in report.detectors if x.status != "ok" and not x.message.startswith("does not support modality")]
         if not_ok:
             out.append("")
             out.append("Detectors skipped or failed:")

@@ -24,10 +24,10 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..fingerprints.image import normalized_correlation, thumb_array
-from ..fingerprints.index import HammingIndex, union_find_groups
+from ..fingerprints.index import HammingIndex
 from ..model import Confidence, Severity
 from ..registry import detectors
-from .base import Detector, DetectorContext, DetectorResult, FindingCap, sample_uri_list
+from .base import Detector, DetectorContext, DetectorResult, FindingCap, sample_uri_list, scoped_components
 
 _POLICY_DESC = (
     "Visually near-identical samples must not be split between training and evaluation: "
@@ -141,7 +141,8 @@ class NearDuplicateDetector(Detector):
         ctx.shared["near_duplicate_pairs"] = [(ids[a], ids[b], d) for a, b, d in pairs]
         ctx.shared["near_duplicate_threshold"] = query_threshold
 
-        comps = union_find_groups(len(ids), [(a, b) for a, b, _ in pairs])
+        split_of_idx = [ctx.dataset.get(sid).split for sid in ids]
+        comps = scoped_components(len(ids), [(a, b) for a, b, _ in pairs], lambda i: split_of_idx[i])
         pair_lookup: Dict[Tuple[int, int], int] = {(a, b): d for a, b, d in pairs}
         cap = FindingCap(int(ctx.config.get("policy.near_duplicate.max_group_findings") or ctx.config.get("output.max_findings_per_kind") or 500))
         sev_for: Dict[str, Severity] = {}
@@ -159,15 +160,14 @@ class NearDuplicateDetector(Detector):
             "embedding": emb_stats,
         }
 
-        for comp in comps:
+        for comp, cross_split in comps:
             members = [ctx.dataset.get(ids[i]) for i in comp]
             member_ids = [s.id for s in members]
             splits = sorted({s.split for s in members})
-            cross_split = len(splits) > 1
             comp_set = set(comp)
-            comp_pairs = [(a, b, d) for (a, b), d in pair_lookup.items() if a in comp_set and b in comp_set]
+            comp_pairs = [(a, b, d) for (a, b), d in pair_lookup.items() if a in comp_set and b in comp_set and (split_of_idx[a] != split_of_idx[b]) == cross_split]
             comp_pairs.sort(key=lambda t: t[2])
-            cross_pairs = [(a, b, d) for a, b, d in comp_pairs if ctx.dataset.get(ids[a]).split != ctx.dataset.get(ids[b]).split]
+            cross_pairs = comp_pairs if cross_split else []
             best_pair = cross_pairs[0] if cross_pairs else (comp_pairs[0] if comp_pairs else None)
             best = best_pair[2] if best_pair else threshold
             best_corr = correlations.get((best_pair[0], best_pair[1]), 1.0) if best_pair else 1.0

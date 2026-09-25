@@ -42,6 +42,10 @@ def _add_scan_arguments(scan: argparse.ArgumentParser, *, diff_mode: bool = Fals
     scan.add_argument("--metadata", "--manifest", dest="metadata", help="metadata manifest (CSV/TSV/JSON/JSONL/Parquet) with per-sample columns such as patient_id, source, captured_at")
     scan.add_argument("--metadata-key", help="manifest column that identifies the sample (default file_name)")
     scan.add_argument("--group-key", "--group-by", dest="group_key", action="append", default=[], help="metadata key that identifies an entity/source/batch (repeatable)")
+    scan.add_argument("--text-field", action="append", default=[], metavar="FIELD",
+                      help="text datasets: record field(s) holding the text (repeatable; concatenated)")
+    scan.add_argument("--label-field", help="text datasets: record field holding the label")
+    scan.add_argument("--id-field", help="text datasets: record field holding the sample id")
     scan.add_argument("--predictions", action="append", default=[], metavar="SPLIT=PATH",
                       help="model predictions for an evaluation split (COCO results JSON, YOLO txt directory or classification CSV); "
                            "the split is scored with and without the flagged samples. Repeatable.")
@@ -101,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_scan_arguments(diff, diff_mode=True)
 
     init = sub.add_parser("init", help="write a sentinel.yaml template")
-    init.add_argument("-f", "--format", default="coco", choices=["coco", "yolo", "voc", "image-folder"])
+    init.add_argument("-f", "--format", default="coco", choices=["coco", "yolo", "voc", "image-folder", "text"])
     init.add_argument("-o", "--output", default="sentinel.yaml")
     init.add_argument("--force", action="store_true")
 
@@ -172,6 +176,14 @@ def build_config_from_args(args: argparse.Namespace, mode: str = "scan") -> Sent
     if args.group_key:
         keys = list(config.get("dataset.groups.keys") or []) + args.group_key
         config.set("dataset.groups.keys", keys)
+    if getattr(args, "text_field", None):
+        config.set("dataset.text.fields", list(args.text_field))
+        if not fmt:
+            config.set("dataset.format", "text")
+    if getattr(args, "label_field", None):
+        config.set("dataset.text.label_field", args.label_field)
+    if getattr(args, "id_field", None):
+        config.set("dataset.text.id_field", args.id_field)
     for item in getattr(args, "predictions", []) or []:
         if "=" not in item:
             raise SystemExit(f"--predictions expects SPLIT=PATH, got {item!r}")

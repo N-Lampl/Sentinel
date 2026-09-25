@@ -32,6 +32,9 @@ Relative paths in the config are resolved against the config file's directory;
 | `lineage.from_filename` | `[]` | regexes with a named group `parent` (matched on the file stem, then name) |
 | `time.keys` | `captured_at, timestamp, date_captured, datetime, capture_time, acquired_at, acquisition_time, time, date, created_at, recorded_at` | metadata keys holding a timestamp |
 | `time.format` | auto | `strptime` format when auto-parsing is not enough |
+| `text.fields` | auto | text datasets: record field(s) holding the text, concatenated (CLI `--text-field`, repeatable); auto picks `text`, `content`, `prompt`, `question`, `input`, `instruction`, `messages`, ... |
+| `text.id_field` / `text.label_field` | auto | record fields for the sample id (`id`, `_id`, `idx`, `uid`, ...) and the label (`label`, `target`, `category`, `class`); CLI `--id-field`, `--label-field` |
+| `text.lowercase` / `text.strip_punctuation` | `true` / `true` | normalisation before hashing |
 
 ## policy
 
@@ -55,6 +58,9 @@ Values are severities: `error` (alias `forbid`, `fail`), `warning`, `info`
 | `derivative.crops` | `true` (2x2 tiles, halves, 50% and 75% centre crops) |
 | `derivative.crop_threshold` / `crop_min_correlation` | `8` / `0.9` (crop candidates use a slightly wider hash threshold and stricter verification; only cross-split pairs are searched) |
 | `derivative.crops_max_images` | `100000`: skip the crop search above this many images and say so in the report (0 = no limit) |
+| `contamination.cross_split` | `error` (text: evaluation items contained in training documents) |
+| `contamination.ngram` / `min_containment` / `min_shared_ngrams` | `8` / `0.5` / `2` |
+| `text_near_duplicate.min_jaccard` / `shingle` / `num_perm` / `bands` | `0.7` / `2` / `128` / `32` (severity comes from `near_duplicate.*`) |
 | `group_overlap.cross_split` | `error` |
 | `lineage.cross_split` | `error` |
 | `temporal.enabled` | `auto` (`true` = chronological splits required, `false` = skip) |
@@ -68,6 +74,7 @@ Values are severities: `error` (alias `forbid`, `fail`), `warning`, `info`
 | `labels.duplicate_annotation` / `invalid_segmentation` | `warning` |
 | `labels.invalid_keypoints` / `keypoints_out_of_bounds` | `error` / `warning` (COCO keypoints and YOLO pose: count, visibility flags, `num_keypoints`, bounds) |
 | `labels.category_mismatch` / `category_set_mismatch` | `error` / `warning` (COCO category lists that differ between split files) |
+| `labels.empty_text` / `short_text` / `min_tokens` | `error` / `warning` / `3` (text records) |
 | `labels.allowed_categories` | `null` (list of allowed class names) |
 | `distribution.imbalance` / `imbalance_ratio` | `warning` / `20` |
 | `distribution.shift` / `shift_threshold` | `warning` / `0.1` |

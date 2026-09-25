@@ -113,6 +113,7 @@ adapters: Registry = Registry(
         "dataset_sentinel.adapters.yolo",
         "dataset_sentinel.adapters.voc",
         "dataset_sentinel.adapters.image_folder",
+        "dataset_sentinel.adapters.text",
     ],
 )
 
@@ -128,6 +129,9 @@ detectors: Registry = Registry(
         "dataset_sentinel.detectors.temporal",
         "dataset_sentinel.detectors.consistency",
         "dataset_sentinel.detectors.distribution",
+        "dataset_sentinel.detectors.text_label_validity",
+        "dataset_sentinel.detectors.text_duplicates",
+        "dataset_sentinel.detectors.text_contamination",
     ],
 )
 

@@ -46,6 +46,7 @@ coco = "dataset_sentinel.adapters.coco:CocoAdapter"
 yolo = "dataset_sentinel.adapters.yolo:YoloAdapter"
 voc = "dataset_sentinel.adapters.voc:VocAdapter"
 image-folder = "dataset_sentinel.adapters.image_folder:ImageFolderAdapter"
+text = "dataset_sentinel.adapters.text:TextAdapter"
 
 [project.entry-points."dataset_sentinel.detectors"]
 exact_duplicate = "dataset_sentinel.detectors.exact_duplicate:ExactDuplicateDetector"
@@ -57,6 +58,10 @@ temporal = "dataset_sentinel.detectors.temporal:TemporalDetector"
 label_validity = "dataset_sentinel.detectors.label_validity:LabelValidityDetector"
 distribution = "dataset_sentinel.detectors.distribution:DistributionDetector"
 consistency = "dataset_sentinel.detectors.consistency:ConsistencyDetector"
+text_label_validity = "dataset_sentinel.detectors.text_label_validity:TextLabelValidityDetector"
+text_exact_duplicate = "dataset_sentinel.detectors.text_duplicates:TextExactDuplicateDetector"
+text_near_duplicate = "dataset_sentinel.detectors.text_duplicates:TextNearDuplicateDetector"
+text_contamination = "dataset_sentinel.detectors.text_contamination:TextContaminationDetector"
 
 [project.entry-points."dataset_sentinel.embeddings"]
 builtin = "dataset_sentinel.embeddings.builtin:BuiltinDescriptor"

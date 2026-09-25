@@ -38,10 +38,10 @@ from ..fingerprints.image import (
     thumb_array,
     transform_thumb,
 )
-from ..fingerprints.index import HammingIndex, union_find_groups
+from ..fingerprints.index import HammingIndex
 from ..model import Confidence, Severity
 from ..registry import detectors
-from .base import Detector, DetectorContext, DetectorResult, FindingCap, sample_uri_list
+from .base import Detector, DetectorContext, DetectorResult, FindingCap, sample_uri_list, scoped_components
 
 _POLICY_DESC = (
     "Transformed copies (flips, rotations, transposes, tiles, crops) of a sample must stay in the "
@@ -199,7 +199,8 @@ class DerivativeDetector(Detector):
             if (rank(q), ids[q]) > (rank(other), ids[other]):
                 best[key] = (d, DIHEDRAL_INVERSE[t_name], other, corr, directed)
 
-        comps = union_find_groups(len(ids), list(best.keys()))
+        split_of_idx = [ctx.dataset.get(sid).split for sid in ids]
+        comps = scoped_components(len(ids), list(best.keys()), lambda i: split_of_idx[i])
         cap = FindingCap(int(ctx.config.get("output.max_findings_per_kind") or 1000))
         sev_for: Dict[str, Severity] = {}
         transform_counts: Dict[str, int] = defaultdict(int)
@@ -218,15 +219,14 @@ class DerivativeDetector(Detector):
             "transforms": dict(transform_counts),
         }
 
-        for comp in comps:
+        for comp, cross_split in comps:
             comp_set = set(comp)
             members = [ctx.dataset.get(ids[i]) for i in comp]
             member_ids = [s.id for s in members]
             splits = sorted({s.split for s in members})
-            cross_split = len(splits) > 1
             pairs = []
             for (a, b), (d, t, q, corr, _directed) in best.items():
-                if a in comp_set and b in comp_set:
+                if a in comp_set and b in comp_set and (split_of_idx[a] != split_of_idx[b]) == cross_split:
                     src, dst = (q, b if q == a else a)
                     pairs.append(
                         {

@@ -117,6 +117,12 @@ class DistributionDetector(Detector):
         ref = self._reference_split(ctx, by_split)
         eval_splits = [s for s in dataset.splits if s != ref]
         res.stats["reference_split"] = ref
+        if ref is not None and sum(class_counts[ref].values()) == 0 and any(sum(class_counts[s].values()) for s in eval_splits):
+            # e.g. an unlabelled training corpus against labelled benchmark items:
+            # class comparisons against the training split are meaningless
+            res.stats["note"] = f"reference split {ref} has no labels; class comparisons against it were skipped"
+            ref = None
+            eval_splits = []
 
         # ------------------------------------------------------------- imbalance
         sev = cfg.severity(_P + "imbalance")
