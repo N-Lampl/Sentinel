@@ -1,0 +1,34 @@
+# Changelog
+
+## 0.1.0 (unreleased)
+
+First release. Computer-vision focus.
+
+### Detection
+- Modality-agnostic data model: samples, annotations, splits, metadata, groups, relationships, integrity policies.
+- Adapters: COCO (one JSON per split, auto-detection, image directory inference, category-list consistency across split files), YOLO / Ultralytics (`data.yaml`, directory or `.txt` lists, polygon and keypoint lines), Pascal VOC (`Annotations/`, `JPEGImages/`, `ImageSets/Main`), image-folder (optional class sub-directories).
+- Enrichment: CSV / TSV / JSON / JSONL / Parquet manifests, entity / source / batch group resolution (well-known keys, explicit keys, file-name patterns), lineage edges from metadata and file-name patterns, timestamp parsing.
+- Image fingerprints: file SHA-256, pixel BLAKE2b, 64-bit dHash, dHash of all 8 dihedral transforms and of 10 regular sub-regions (tiles, halves, centre crops), 16x16 verification thumbnail, blank detection; symmetric under rotation; threaded computation with a sqlite cache keyed by path / size / mtime / version / mode; `fast` mode with reduced-resolution JPEG decoding.
+- Multi-index Hamming search (exact recall for the configured threshold) and union-find grouping; every hash candidate verified by thumbnail correlation.
+- Detectors: `exact_duplicate`, `near_duplicate`, `derivative` (flips, rotations, transposes, tiles, crops), `group_overlap`, `lineage`, `temporal`, `label_validity`, `distribution` (JS divergence, Wasserstein distances, unseen classes, co-occurrence), `consistency` (review triage).
+
+### Policy and CI workflow
+- Split integrity violation rate with per-split, per-detector and per-confidence breakdowns plus a strict rate; cross-split clusters that unify all evidence per connected set of samples.
+- Baselines (`sentinel baseline create`), diffs (`sentinel diff`, `--baseline`, `fail_on.new_only`): findings marked new / known, changes since baseline (rate, severities, split sizes, classes, new cross-split groups).
+- Allowlist with reasons and expiry (by finding id, group, kind, detector or sample globs); suppressed findings stay visible and leave the rate.
+- Split-pair severity overrides (`policy.split_pair_overrides`).
+- Fix plan (`--fix-plan plan.json|csv`) with per-sample remove / move actions.
+- Fail conditions: severity, violation rate, detector errors, new-only mode.
+- Config validation with typo suggestions.
+
+### Outputs and integrations
+- Reporters: console, JSON (schema version 1), self-contained HTML (filters incl. new / suppressed, thumbnails, clusters, baseline diff, class distribution, light / dark), Markdown (GitHub job summary), SARIF 2.1.0 (stable fingerprints, suppressions), DVC metrics.
+- CLI (`sentinel scan / baseline create / diff / init / plugins / version`) with config discovery, `--set` overrides, `--fast`, GitHub workflow annotations and CI exit codes.
+- Composite GitHub Action (`action.yml`) with job summary, annotations, artifact upload, baseline / new-only inputs, SARIF / fix-plan / DVC outputs.
+- Plugin registries with entry points for adapters, detectors and reporters.
+- Test-suite with synthetic COCO / YOLO / VOC datasets and planted problems; 5,000-image scale check.
+
+### Not included
+- Video, tabular, text, audio, time-series and multimodal adapters (interface documented in `docs/adapters.md`).
+- Arbitrary (non-grid) crop detection by content and embedding-based semantic similarity.
+- Hosted reporting platform.

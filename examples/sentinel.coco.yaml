@@ -1,0 +1,70 @@
+# Example configuration for a COCO dataset with patient-level grouping and
+# chronological splits.
+version: 1
+
+dataset:
+  name: chest-xray-detection
+  format: coco
+  root: .
+  splits:
+    train: {annotations: annotations/instances_train.json, images: images/train}
+    val:   {annotations: annotations/instances_val.json,   images: images/val}
+    test:  {annotations: annotations/instances_test.json,  images: images/test}
+  metadata:
+    file: metadata.csv          # columns: file_name, patient_id, study_id, device, captured_at
+    key: file_name
+    match: name
+  groups:
+    auto: true
+    keys: [patient_id, study_id, device]
+  lineage:
+    from_filename: ["^(?P<parent>.+?)_(?:crop|tile|aug)\\d*$"]
+  time:
+    keys: [captured_at]
+
+policy:
+  split_order: [train, val, test]
+  # train/val overlap is tolerated as a warning in this project; train/test never
+  split_pair_overrides: {"train/val": warning, "train/test": error, "val/test": error}
+  exact_duplicate: {cross_split: error, within_split: warning}
+  near_duplicate:  {cross_split: error, within_split: info, threshold: 6}
+  derivative:      {cross_split: error, within_split: info}
+  group_overlap:   {cross_split: error}
+  lineage:         {cross_split: error}
+  temporal:        {enabled: true, cross_split: error, min_coverage: 0.9}
+  labels:
+    missing_annotations: warning
+    out_of_bounds_bbox: error
+    allowed_categories: [nodule, mass, effusion]
+  distribution:
+    imbalance_ratio: 15
+    shift_threshold: 0.08
+    unseen_class: error
+
+# Known, permitted findings (kept in the report as "suppressed", excluded from the rate)
+allowlist:
+  - samples: ["images/*/calib_*.jpg"]
+    reason: "calibration phantom appears in every split by design"
+    expires: 2027-06-30
+
+# Compare against the approved baseline (sentinel baseline create -o .sentinel/baseline.json)
+baseline:
+  file: .sentinel/baseline.json
+
+output:
+  json: reports/sentinel.json
+  html: reports/sentinel.html
+  sarif: reports/sentinel.sarif
+  fix_plan: reports/fix-plan.csv
+  thumbnails: true
+
+fail_on:
+  severity: error
+  max_violation_rate: 0.0
+  new_only: true          # fail only on regressions relative to the baseline
+  detector_errors: true
+
+performance:
+  mode: exact             # or fast for large photo collections
+  workers: 8
+  cache: .sentinel-cache

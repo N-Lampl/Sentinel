@@ -1,0 +1,26 @@
+# Example configuration for an Ultralytics-style YOLO dataset where the video
+# a frame came from is encoded in the file name (video012_frame0431.jpg).
+version: 1
+
+dataset:
+  name: traffic-cams
+  format: yolo
+  root: .
+  data: data.yaml
+  groups:
+    from_filename:
+      video: "^(?P<value>video\\d+)_frame"
+
+policy:
+  near_duplicate: {cross_split: error, within_split: info, threshold: 8}   # consecutive frames are similar
+  derivative:     {cross_split: error}
+  group_overlap:  {cross_split: error}
+  labels:
+    missing_label_file: warning
+    min_bbox_size_px: 2
+  distribution:
+    imbalance_ratio: 50
+
+fail_on:
+  severity: error
+  max_violation_rate: 0.0

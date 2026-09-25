@@ -1,0 +1,46 @@
+# Example workflow: validate the dataset on every pull request that touches it.
+# Copy to .github/workflows/dataset-sentinel.yml in your repository.
+name: Dataset integrity
+
+on:
+  pull_request:
+    paths:
+      - "data/**"
+      - "sentinel.yaml"
+  workflow_dispatch:
+
+jobs:
+  sentinel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true                      # if images are stored with Git LFS
+
+      - name: Restore fingerprint cache
+        uses: actions/cache@v4
+        with:
+          path: .sentinel-cache
+          key: sentinel-${{ hashFiles('data/**') }}
+          restore-keys: sentinel-
+
+      - name: Dataset Sentinel
+        id: sentinel
+        uses: dataset-sentinel/dataset-sentinel@v0.1
+        with:
+          path: data
+          config: sentinel.yaml          # optional
+          fail-on: error
+          max-violation-rate: "0"
+          args: "--set policy.near_duplicate.threshold=5"
+
+      - name: Comment on the PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('sentinel-report/summary.md', 'utf8');
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: context.issue.number, body,
+            });

@@ -1,0 +1,203 @@
+name: "Dataset Sentinel"
+description: "Validate ML dataset split integrity before training: duplicate, group, lineage and time leakage plus label and distribution checks."
+author: "Dataset Sentinel contributors"
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  path:
+    description: "Dataset root directory (the format is auto-detected unless 'format' is given)."
+    required: false
+    default: "."
+  config:
+    description: "Path to a sentinel.yaml. When empty, a sentinel.yaml inside 'path' or the repository root is used if present."
+    required: false
+    default: ""
+  format:
+    description: "Dataset format: coco, yolo, voc or image-folder. Empty = auto-detect."
+    required: false
+    default: ""
+  fail-on:
+    description: "Lowest finding severity that fails the job: error, warning, info or none."
+    required: false
+    default: "error"
+  max-violation-rate:
+    description: "Fail when the split integrity violation rate exceeds this fraction (0 to 1)."
+    required: false
+    default: "0"
+  baseline:
+    description: "Path to an approved baseline JSON report (from 'sentinel baseline create'). Findings already present there are marked as known."
+    required: false
+    default: ""
+  new-only:
+    description: "With a baseline: fail only on new findings and on a violation rate above the baseline's."
+    required: false
+    default: "false"
+  args:
+    description: "Extra arguments passed to 'sentinel scan' (for example '--set policy.near_duplicate.threshold=4 --disable distribution')."
+    required: false
+    default: ""
+  report-dir:
+    description: "Directory that receives report.json, report.html, summary.md and the optional sarif / fix-plan / dvc files."
+    required: false
+    default: "sentinel-report"
+  cache-dir:
+    description: "Fingerprint cache directory (persist it with actions/cache to speed up re-runs). Empty disables caching."
+    required: false
+    default: ".sentinel-cache"
+  annotations:
+    description: "Emit GitHub workflow annotations (::error / ::warning) for the top findings."
+    required: false
+    default: "true"
+  sarif:
+    description: "Also write report.sarif (upload it with github/codeql-action/upload-sarif to see findings in code scanning)."
+    required: false
+    default: "false"
+  fix-plan:
+    description: "Also write fix-plan.json with suggested per-sample remove/move actions."
+    required: false
+    default: "true"
+  dvc-metrics:
+    description: "Also write metrics.yaml with flat integrity metrics for DVC."
+    required: false
+    default: "false"
+  python-version:
+    description: "Python version used to run Sentinel."
+    required: false
+    default: "3.11"
+  version:
+    description: "pip version specifier for dataset-sentinel (for example '==0.1.0'). Use 'local' to install the action's own checkout (self-test)."
+    required: false
+    default: ""
+  upload-artifact:
+    description: "Upload the report directory as a workflow artifact."
+    required: false
+    default: "true"
+  artifact-name:
+    description: "Name of the uploaded artifact."
+    required: false
+    default: "dataset-sentinel-report"
+
+outputs:
+  passed:
+    description: "'true' when no fail condition was hit."
+    value: ${{ steps.scan.outputs.passed }}
+  violation-rate:
+    description: "Split integrity violation rate (fraction)."
+    value: ${{ steps.scan.outputs.violation-rate }}
+  errors:
+    description: "Number of error-severity findings."
+    value: ${{ steps.scan.outputs.errors }}
+  new-findings:
+    description: "Number of findings not present in the baseline (empty without a baseline)."
+    value: ${{ steps.scan.outputs.new-findings }}
+  json-report:
+    description: "Path to the JSON report."
+    value: ${{ steps.scan.outputs.json-report }}
+  html-report:
+    description: "Path to the HTML report."
+    value: ${{ steps.scan.outputs.html-report }}
+  sarif-report:
+    description: "Path to the SARIF file (when 'sarif' is true)."
+    value: ${{ steps.scan.outputs.sarif-report }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install dataset-sentinel
+      shell: bash
+      run: |
+        if [ "${{ inputs.version }}" = "local" ]; then
+          python -m pip install --quiet "${{ github.action_path }}"
+        else
+          python -m pip install --quiet "dataset-sentinel${{ inputs.version }}"
+        fi
+        sentinel --version
+
+    - name: Scan dataset
+      id: scan
+      shell: bash
+      env:
+        SENTINEL_PATH: ${{ inputs.path }}
+        SENTINEL_CONFIG: ${{ inputs.config }}
+        SENTINEL_FORMAT: ${{ inputs.format }}
+        SENTINEL_FAIL_ON: ${{ inputs.fail-on }}
+        SENTINEL_MAX_RATE: ${{ inputs.max-violation-rate }}
+        SENTINEL_BASELINE: ${{ inputs.baseline }}
+        SENTINEL_NEW_ONLY: ${{ inputs.new-only }}
+        SENTINEL_ARGS: ${{ inputs.args }}
+        SENTINEL_REPORT_DIR: ${{ inputs.report-dir }}
+        SENTINEL_CACHE: ${{ inputs.cache-dir }}
+        SENTINEL_ANNOTATIONS: ${{ inputs.annotations }}
+        SENTINEL_SARIF: ${{ inputs.sarif }}
+        SENTINEL_FIX_PLAN: ${{ inputs.fix-plan }}
+        SENTINEL_DVC: ${{ inputs.dvc-metrics }}
+      run: |
+        set +e
+        mkdir -p "$SENTINEL_REPORT_DIR"
+        cmd=(sentinel scan "$SENTINEL_PATH"
+             --json "$SENTINEL_REPORT_DIR/report.json"
+             --html "$SENTINEL_REPORT_DIR/report.html"
+             --markdown "$SENTINEL_REPORT_DIR/summary.md"
+             --fail-on "$SENTINEL_FAIL_ON"
+             --max-violation-rate "$SENTINEL_MAX_RATE"
+             --no-color)
+        [ -n "$SENTINEL_CONFIG" ] && cmd+=(--config "$SENTINEL_CONFIG")
+        [ -n "$SENTINEL_FORMAT" ] && cmd+=(--format "$SENTINEL_FORMAT")
+        [ -n "$SENTINEL_BASELINE" ] && cmd+=(--baseline "$SENTINEL_BASELINE")
+        [ "$SENTINEL_NEW_ONLY" = "true" ] && cmd+=(--new-only)
+        [ "$SENTINEL_ANNOTATIONS" = "true" ] && cmd+=(--github-annotations)
+        [ "$SENTINEL_SARIF" = "true" ] && cmd+=(--sarif "$SENTINEL_REPORT_DIR/report.sarif")
+        [ "$SENTINEL_FIX_PLAN" = "true" ] && cmd+=(--fix-plan "$SENTINEL_REPORT_DIR/fix-plan.json")
+        [ "$SENTINEL_DVC" = "true" ] && cmd+=(--dvc "$SENTINEL_REPORT_DIR/metrics.yaml")
+        if [ -n "$SENTINEL_CACHE" ]; then cmd+=(--cache "$SENTINEL_CACHE"); else cmd+=(--no-cache); fi
+        # shellcheck disable=SC2206
+        cmd+=($SENTINEL_ARGS)
+        echo "+ ${cmd[*]}"
+        "${cmd[@]}"
+        code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        if [ -f "$SENTINEL_REPORT_DIR/summary.md" ]; then
+          cat "$SENTINEL_REPORT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        if [ -f "$SENTINEL_REPORT_DIR/report.json" ]; then
+          python - "$SENTINEL_REPORT_DIR/report.json" >> "$GITHUB_OUTPUT" <<'PY'
+        import json, sys
+        r = json.load(open(sys.argv[1]))
+        print(f"passed={'true' if r['passed'] else 'false'}")
+        print(f"violation-rate={r['metrics']['split_integrity_violation_rate']:.6f}")
+        print(f"errors={r['metrics']['severity_counts'].get('error', 0)}")
+        b = (r.get('stats') or {}).get('baseline') or {}
+        print(f"new-findings={b.get('new', '') if b.get('applied') else ''}")
+        PY
+        else
+          echo "passed=false" >> "$GITHUB_OUTPUT"
+        fi
+        echo "json-report=$SENTINEL_REPORT_DIR/report.json" >> "$GITHUB_OUTPUT"
+        echo "html-report=$SENTINEL_REPORT_DIR/report.html" >> "$GITHUB_OUTPUT"
+        [ "$SENTINEL_SARIF" = "true" ] && echo "sarif-report=$SENTINEL_REPORT_DIR/report.sarif" >> "$GITHUB_OUTPUT"
+        exit 0
+
+    - name: Upload report
+      if: ${{ inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.report-dir }}
+        if-no-files-found: warn
+
+    - name: Enforce policy
+      shell: bash
+      env:
+        CODE: ${{ steps.scan.outputs.exit-code }}
+      run: |
+        if [ "$CODE" != "0" ]; then
+          echo "::error::Dataset Sentinel found policy violations (exit code $CODE). See the job summary and the uploaded report."
+          exit "$CODE"
+        fi
+        echo "Dataset Sentinel: PASS"

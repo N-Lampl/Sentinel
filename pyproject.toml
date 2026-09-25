@@ -1,0 +1,92 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dataset-sentinel"
+version = "0.1.0"
+description = "Validate ML dataset split integrity before training: duplicate, group, lineage and time leakage plus label and distribution checks. Computer vision first."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Dataset Sentinel contributors" }]
+keywords = ["machine-learning", "dataset", "data-leakage", "validation", "computer-vision", "coco", "yolo"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+  "numpy>=1.22",
+  "Pillow>=9.0",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov", "ruff", "mypy", "build"]
+
+[project.scripts]
+sentinel = "dataset_sentinel.cli:main"
+dataset-sentinel = "dataset_sentinel.cli:main"
+
+[project.entry-points."dataset_sentinel.adapters"]
+coco = "dataset_sentinel.adapters.coco:CocoAdapter"
+yolo = "dataset_sentinel.adapters.yolo:YoloAdapter"
+voc = "dataset_sentinel.adapters.voc:VocAdapter"
+image-folder = "dataset_sentinel.adapters.image_folder:ImageFolderAdapter"
+
+[project.entry-points."dataset_sentinel.detectors"]
+exact_duplicate = "dataset_sentinel.detectors.exact_duplicate:ExactDuplicateDetector"
+near_duplicate = "dataset_sentinel.detectors.near_duplicate:NearDuplicateDetector"
+derivative = "dataset_sentinel.detectors.derivative:DerivativeDetector"
+group_overlap = "dataset_sentinel.detectors.group_overlap:GroupOverlapDetector"
+lineage = "dataset_sentinel.detectors.lineage:LineageDetector"
+temporal = "dataset_sentinel.detectors.temporal:TemporalDetector"
+label_validity = "dataset_sentinel.detectors.label_validity:LabelValidityDetector"
+distribution = "dataset_sentinel.detectors.distribution:DistributionDetector"
+consistency = "dataset_sentinel.detectors.consistency:ConsistencyDetector"
+
+[project.entry-points."dataset_sentinel.reporters"]
+json = "dataset_sentinel.reporters.json_reporter:JsonReporter"
+html = "dataset_sentinel.reporters.html_reporter:HtmlReporter"
+console = "dataset_sentinel.reporters.console:ConsoleReporter"
+markdown = "dataset_sentinel.reporters.markdown_reporter:MarkdownReporter"
+sarif = "dataset_sentinel.reporters.sarif_reporter:SarifReporter"
+dvc = "dataset_sentinel.reporters.dvc_reporter:DvcReporter"
+
+[project.urls]
+Homepage = "https://github.com/dataset-sentinel/dataset-sentinel"
+Documentation = "https://github.com/dataset-sentinel/dataset-sentinel/tree/main/docs"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dataset_sentinel = ["py.typed", "reporters/templates/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "W"]
+ignore = ["E501", "B905", "B023"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["dataset_sentinel", "conftest"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
